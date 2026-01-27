@@ -1,29 +1,56 @@
 {
   "expo": {
-    "name": "paxmedya-mesai-takip",
+    "name": "Pax Medya Mesai Takip",
     "slug": "paxmedya-mesai-takip",
     "version": "1.0.0",
     "orientation": "portrait",
+    "cli": {
+      "appVersionSource": "remote"
+    },
     "icon": "./assets/icon.png",
-    "userInterfaceStyle": "light",
+    "userInterfaceStyle": "automatic",
     "newArchEnabled": true,
     "splash": {
       "image": "./assets/splash-icon.png",
       "resizeMode": "contain",
-      "backgroundColor": "#ffffff"
+      "backgroundColor": "#6366f1"
     },
     "ios": {
-      "supportsTablet": true
+      "supportsTablet": true,
+      "bundleIdentifier": "com.paxmedya.mesaitakip",
+      "infoPlist": {
+        "NSLocationWhenInUseUsageDescription": "Mesai girisi ve cikisi icin konumunuza ihtiyacimiz var.",
+        "NSLocationAlwaysUsageDescription": "Mesai girisi ve cikisi icin konumunuza ihtiyacimiz var."
+      }
     },
     "android": {
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",
-        "backgroundColor": "#ffffff"
+        "backgroundColor": "#6366f1"
       },
-      "edgeToEdgeEnabled": true
+      "edgeToEdgeEnabled": true,
+      "package": "com.paxmedya.mesaitakip",
+      "permissions": [
+        "ACCESS_FINE_LOCATION",
+        "ACCESS_COARSE_LOCATION"
+      ]
     },
     "web": {
       "favicon": "./assets/favicon.png"
+    },
+    "plugins": [
+      [
+        "expo-location",
+        {
+          "locationAlwaysAndWhenInUsePermission": "Mesai girisi ve cikisi icin konumunuza ihtiyacimiz var."
+        }
+      ],
+      "expo-font"
+    ],
+    "extra": {
+      "eas": {
+        "projectId": "bde4ba73-337d-42c4-8c21-da1b7d274814"
+      }
     }
   }
 }
