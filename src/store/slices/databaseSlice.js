@@ -49,7 +49,9 @@ export const updateUserProfile = createAsyncThunk(
   'database/updateUserProfile',
   async ({ userId, data }, { rejectWithValue }) => {
     try {
-      console.log('Iniciando atualização de perfil:', { userId, data });
+      if (__DEV__) {
+        console.log('Iniciando atualização de perfil:', { userId, data });
+      }
       const userRef = doc(db, 'users', userId);
       
       // setDoc com merge: true -> oluşturur veya günceller
@@ -58,10 +60,14 @@ export const updateUserProfile = createAsyncThunk(
         updatedAt: new Date(),
       }, { merge: true });
       
-      console.log('Perfil atualizado com sucesso');
+      if (__DEV__) {
+        console.log('Perfil atualizado com sucesso');
+      }
       return { id: userId, ...data };
     } catch (error) {
-      console.error('Erro ao atualizar perfil:', error);
+      if (__DEV__) {
+        console.error('Erro ao atualizar perfil:', error);
+      }
       return rejectWithValue(error.message);
     }
   }

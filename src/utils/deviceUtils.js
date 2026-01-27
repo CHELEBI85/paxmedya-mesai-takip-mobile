@@ -26,7 +26,9 @@ export const getDeviceId = async () => {
     
     return deviceId;
   } catch (error) {
-    console.error('Cihaz ID alınamadı:', error);
+    if (__DEV__) {
+      console.error('Cihaz ID alınamadı:', error);
+    }
     // Fallback: timestamp bazlı ID
     return `device_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
   }
@@ -42,7 +44,9 @@ export const getDeviceName = async () => {
     
     return `${deviceInfo.brand} ${deviceInfo.modelName}`;
   } catch (error) {
-    console.error('Cihaz adı alınamadı:', error);
+    if (__DEV__) {
+      console.error('Cihaz adı alınamadı:', error);
+    }
     return 'Bilinmeyen Cihaz';
   }
 };
@@ -52,6 +56,8 @@ export const clearDeviceId = async () => {
   try {
     await AsyncStorage.removeItem(DEVICE_ID_KEY);
   } catch (error) {
-    console.error('Cihaz ID temizlenemedi:', error);
+    if (__DEV__) {
+      console.error('Cihaz ID temizlenemedi:', error);
+    }
   }
 };

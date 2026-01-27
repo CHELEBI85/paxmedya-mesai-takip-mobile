@@ -43,8 +43,8 @@ export const loginUser = createAsyncThunk(
         const registeredDeviceId = userData.deviceId;
         const registeredDeviceName = userData.deviceName;
         
-        // Eğer cihaz ID veya cihaz adı yoksa, tekrar kaydet
-        if (!registeredDeviceId || !registeredDeviceName) {
+        // Eğer cihaz adı yoksa, tekrar kaydet
+        if (!registeredDeviceName) {
           await setDoc(userRef, {
             ...userData,
             deviceId: currentDeviceId,
@@ -53,15 +53,21 @@ export const loginUser = createAsyncThunk(
             updatedAt: new Date(),
           }, { merge: true });
         } else {
-          // Cihaz ID kayıtlı - kontrol et
-          if (registeredDeviceId !== currentDeviceId) {
+          // Cihaz adına göre kontrol et (cihaz adı daha stabil)
+          if (registeredDeviceName !== deviceName) {
             // Farklı cihaz - giriş yapma!
             await signOut(auth);
             return rejectWithValue('Bu hesap sadece kayıtlı cihazdan giriş yapabilir. Lütfen yetkili cihazınızı kullanın.');
           }
+          // Cihaz adı eşleşiyor - cihaz ID'yi güncelle (değişmiş olabilir)
+          await setDoc(userRef, {
+            ...userData,
+            deviceId: currentDeviceId,
+            updatedAt: new Date(),
+          }, { merge: true });
         }
       } else {
-        // Kullanıcı profili yok - oluştur ve cihaz ID kaydet
+        // Kullanıcı profili yok - oluştur ve cihaz bilgilerini kaydet
         await setDoc(userRef, {
           uid: user.uid,
           email: user.email,

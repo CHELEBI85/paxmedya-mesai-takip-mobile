@@ -4,16 +4,13 @@
     "slug": "paxmedya-mesai-takip",
     "version": "1.0.0",
     "orientation": "portrait",
-    "cli": {
-      "appVersionSource": "remote"
-    },
-    "icon": "./assets/icon.png",
+    "icon": "./assets/logo.png",
     "userInterfaceStyle": "automatic",
     "newArchEnabled": true,
     "splash": {
-      "image": "./assets/splash-icon.png",
+      "image": "./assets/logo.png",
       "resizeMode": "contain",
-      "backgroundColor": "#6366f1"
+      "backgroundColor": "#000000"
     },
     "ios": {
       "supportsTablet": true,
@@ -25,8 +22,8 @@
     },
     "android": {
       "adaptiveIcon": {
-        "foregroundImage": "./assets/adaptive-icon.png",
-        "backgroundColor": "#6366f1"
+        "foregroundImage": "./assets/logo.png",
+        "backgroundColor": "#000000"
       },
       "edgeToEdgeEnabled": true,
       "package": "com.paxmedya.mesaitakip",
@@ -36,7 +33,7 @@
       ]
     },
     "web": {
-      "favicon": "./assets/favicon.png"
+      "favicon": "./assets/logo.png"
     },
     "plugins": [
       [
@@ -46,11 +43,6 @@
         }
       ],
       "expo-font"
-    ],
-    "extra": {
-      "eas": {
-        "projectId": "bde4ba73-337d-42c4-8c21-da1b7d274814"
-      }
-    }
+    ]
   }
 }

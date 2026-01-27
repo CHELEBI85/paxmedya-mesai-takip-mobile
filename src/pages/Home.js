@@ -9,7 +9,7 @@ import {
   Alert,
   Image,
 } from 'react-native';
-import MapView, { Marker, Circle } from 'react-native-maps';
+import { WebView } from 'react-native-webview';
 import { MaterialIcons } from '@expo/vector-icons';
 import { useAuth } from '../hooks/useAuth';
 import { useDatabase } from '../hooks/useDatabase';
@@ -58,11 +58,13 @@ export default function Home() {
   const [isInZone, setIsInZone] = useState(false);
   const [locationLoading, setLocationLoading] = useState(true);
   const [locationError, setLocationError] = useState(null);
+  const [isUserDragging, setIsUserDragging] = useState(false); // Kullanıcı haritayı kaydırıyor mu?
   const [checkInStatus, setCheckInStatus] = useState('idle'); // idle, checked-in, checked-out
   const [checkInTime, setCheckInTime] = useState(null);
   const [checkOutTime, setCheckOutTime] = useState(null);
   const [isProcessing, setIsProcessing] = useState(false);
   const [recordId, setRecordId] = useState(null); // Dokument ID'sini sakla
+  const [hasShownAutoCheckoutAlert, setHasShownAutoCheckoutAlert] = useState(false);
 
   // Profil bilgisini yükle
   useEffect(() => {
@@ -74,7 +76,7 @@ export default function Home() {
 
   // Bugünün kaydını kontrol et ve önceki günün eksik kaydını kontrol et
   useEffect(() => {
-    if (user?.uid && records) {
+    if (user?.uid && records && !hasShownAutoCheckoutAlert) {
       const today = new Date().toISOString().split('T')[0]; // YYYY-MM-DD
       
       // Kullanıcının kendi kayıtlarını filtrele
@@ -91,33 +93,28 @@ export default function Home() {
       
       // Eğer önceki günün eksik kaydı varsa, otomatik olarak gece yarısında çıkış yap (18:30 olarak kaydet)
       if (yesterdayRecord) {
+        setHasShownAutoCheckoutAlert(true);
+        
         // Çıkış saati olarak 18:30'u kullan
         const checkoutTime = new Date(yesterday);
         checkoutTime.setHours(18, 30, 0, 0); // 18:30
         
-        Alert.alert(
-          'Eksik Kayıt Tespit Edildi',
-          `Dün (${yesterday.toLocaleDateString('tr-TR')}) giriş yaptınız ancak çıkış yapmadınız. Otomatik olarak 18:30'da çıkış yapılacak.`,
-          [
-            {
-              text: 'Tamam',
-              onPress: async () => {
-                try {
-                  await updateRecord(yesterdayRecord.id, {
-                    checkOutTime: checkoutTime.toISOString(),
-                    checkOutLocation: yesterdayRecord.checkInLocation || null,
-                    autoCheckOut: true, // Otomatik çıkış olduğunu belirt
-                  });
-                  // Kayıtları yeniden yükle
-                  getWorkRecords(user.uid);
-                } catch (error) {
-                  console.error('Otomatik çıkış hatası:', error);
-                  Alert.alert('Hata', 'Otomatik çıkış yapılamadı: ' + error.message);
-                }
-              },
-            },
-          ]
-        );
+        // Otomatik çıkış yap (alert göstermeden)
+        updateRecord(yesterdayRecord.id, {
+          checkOutTime: checkoutTime.toISOString(),
+          checkOutLocation: yesterdayRecord.checkInLocation || null,
+          autoCheckOut: true, // Otomatik çıkış olduğunu belirt
+        })
+        .then(() => {
+          // Kayıtları yeniden yükle
+          getWorkRecords(user.uid);
+        })
+        .catch((error) => {
+          // Hata durumunda sessizce devam et
+          if (__DEV__) {
+            console.error('Otomatik çıkış hatası:', error);
+          }
+        });
       }
       
       // Bugünün kaydını ara
@@ -149,31 +146,33 @@ export default function Home() {
 
   // Konum İzni ve Takibi Başlat
   useEffect(() => {
-    startLocationTracking();
-  }, []);
+    let subscription = null;
+    let isMounted = true;
 
-  const startLocationTracking = async () => {
-    try {
-      const { status } = await Location.requestForegroundPermissionsAsync();
-      if (status !== 'granted') {
-        setLocationError('Konum izni reddedildi');
-        setLocationLoading(false);
-        return;
-      }
+    const startLocationTracking = async () => {
+      try {
+        const { status } = await Location.requestForegroundPermissionsAsync();
+        if (!isMounted) return;
+        
+        if (status !== 'granted') {
+          setLocationError('Konum izni reddedildi');
+          setLocationLoading(false);
+          return;
+        }
 
-      // Gerçek zamanlı konum takibi
-      const subscription = await Location.watchPositionAsync(
-        {
-          accuracy: Location.Accuracy.High,
-          timeInterval: 5000, // 5 saniyede bir güncelle
-          distanceInterval: 10, // 10 metre değişimde güncelle
-        },
-        (loc) => {
-          setLocation(loc.coords);
+        // Önce hızlıca mevcut konumu al (kullanıcı hemen görsün)
+        try {
+          const currentLocation = await Location.getCurrentPositionAsync({
+            accuracy: Location.Accuracy.High,
+          });
+          
+          if (!isMounted) return;
+          
+          setLocation(currentLocation.coords);
           const inZone = isWithinRadius(
             {
-              latitude: loc.coords.latitude,
-              longitude: loc.coords.longitude,
+              latitude: currentLocation.coords.latitude,
+              longitude: currentLocation.coords.longitude,
             },
             GEOFENCE_CENTER,
             GEOFENCE_RADIUS
@@ -181,32 +180,201 @@ export default function Home() {
           setIsInZone(inZone);
           setLocationLoading(false);
           setLocationError(null);
+        } catch (getLocationError) {
+          // İlk konum alınamazsa devam et, watchPositionAsync dener
+          if (__DEV__) {
+            console.error('İlk konum alınamadı:', getLocationError);
+          }
         }
-      );
 
-      return () => {
-        subscription.remove();
-      };
-    } catch (error) {
-      console.error('Konum hatası:', error);
-      setLocationError('Konum alınamadı: ' + error.message);
-      setLocationLoading(false);
+        // Sonra gerçek zamanlı konum takibini başlat
+        subscription = await Location.watchPositionAsync(
+          {
+            accuracy: Location.Accuracy.High,
+            timeInterval: 5000, // 5 saniyede bir güncelle
+            distanceInterval: 10, // 10 metre değişimde güncelle
+          },
+          (loc) => {
+            if (!isMounted) return;
+            
+            try {
+              setLocation(loc.coords);
+              const inZone = isWithinRadius(
+                {
+                  latitude: loc.coords.latitude,
+                  longitude: loc.coords.longitude,
+                },
+                GEOFENCE_CENTER,
+                GEOFENCE_RADIUS
+              );
+              setIsInZone(inZone);
+              setLocationLoading(false);
+              setLocationError(null);
+            } catch (err) {
+              // Hata durumunda sessizce devam et
+              if (isMounted) {
+                setLocationLoading(false);
+              }
+            }
+          }
+        );
+      } catch (error) {
+        if (isMounted) {
+          setLocationError('Konum alınamadı. Lütfen uygulama ayarlarından konum iznini kontrol edin.');
+          setLocationLoading(false);
+        }
+      }
+    };
+
+    startLocationTracking();
+
+    // Cleanup function
+    return () => {
+      isMounted = false;
+      if (subscription) {
+        try {
+          subscription.remove();
+        } catch (err) {
+          // Sessizce devam et
+        }
+      }
+    };
+  }, []);
+
+  // Konum veya isInZone değiştiğinde haritayı güncelle (sadece marker, otomatik odaklama yok)
+  useEffect(() => {
+    if (location && mapRef.current) {
+      const fillColor = isInZone ? 'rgba(16, 185, 129, 0.3)' : 'rgba(239, 68, 68, 0.3)';
+      const strokeColor = isInZone ? '#10b981' : '#ef4444';
+      
+      const script = `
+        if (window.map) {
+          // Kullanıcı marker'ı güncelle
+          var userMarker = window.userMarker;
+          if (userMarker) {
+            userMarker.setLatLng([${location.latitude}, ${location.longitude}]);
+          } else {
+            var userIcon = L.icon({
+              iconUrl: 'data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMzIiIGhlaWdodD0iMzIiIHhtbG5zPSJodHRwOi8vd3d3LnczLm9yZy8yMDAwL3N2ZyI+PGNpcmNsZSBjeD0iMTYiIGN5PSIxNiIgcj0iMTYiIGZpbGw9IiMxMGI5ODEiLz48Y2lyY2xlIGN4PSIxNiIgY3k9IjE2IiByPSIxMiIgZmlsbD0id2hpdGUiLz48L3N2Zz4=',
+              iconSize: [32, 32],
+              iconAnchor: [16, 16]
+            });
+            window.userMarker = L.marker([${location.latitude}, ${location.longitude}], { icon: userIcon })
+              .addTo(window.map)
+              .bindPopup('Bulunduğunuz Yer');
+          }
+          
+          // Geofence circle'ı güncelle
+          if (window.geofenceCircle) {
+            window.geofenceCircle.setStyle({
+              color: '${strokeColor}',
+              fillColor: '${fillColor}'
+            });
+          }
+          
+          // Sadece kullanıcı haritayı kaydırmıyorsa otomatik odakla
+          if (!window.isUserDragging) {
+            window.map.setView([${location.latitude}, ${location.longitude}], 15);
+          }
+        }
+      `;
+      mapRef.current.injectJavaScript(script);
     }
-  };
+  }, [location, isInZone]);
 
   // Konumuma git - haritayı mevcut konuma odakla
   const handleGoToMyLocation = () => {
     if (location && mapRef.current) {
-      mapRef.current.animateToRegion(
-        {
-          latitude: location.latitude,
-          longitude: location.longitude,
-          latitudeDelta: 0.01,
-          longitudeDelta: 0.01,
-        },
-        1000 // 1 saniye animasyon
-      );
+      setIsUserDragging(false); // Otomatik takibi tekrar aktif et
+      const script = `
+        if (window.map && window.map.setView) {
+          window.isUserDragging = false;
+          window.map.setView([${location.latitude}, ${location.longitude}], 15);
+        }
+      `;
+      mapRef.current.injectJavaScript(script);
     }
+  };
+
+  // Leaflet + OpenStreetMap HTML
+  const getMapHTML = () => {
+    if (!location) return '';
+    
+    const centerLat = location.latitude;
+    const centerLng = location.longitude;
+    const geofenceLat = GEOFENCE_CENTER.latitude;
+    const geofenceLng = GEOFENCE_CENTER.longitude;
+    const radius = GEOFENCE_RADIUS;
+    const fillColor = isInZone ? 'rgba(16, 185, 129, 0.3)' : 'rgba(239, 68, 68, 0.3)';
+    const strokeColor = isInZone ? '#10b981' : '#ef4444';
+
+    return `
+      <!DOCTYPE html>
+      <html>
+        <head>
+          <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+          <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+          <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+          <style>
+            body { margin: 0; padding: 0; }
+            #map { width: 100%; height: 100vh; }
+          </style>
+        </head>
+        <body>
+          <div id="map"></div>
+          <script>
+            var map = L.map('map').setView([${centerLat}, ${centerLng}], 15);
+            window.map = map;
+            window.isUserDragging = false; // Kullanıcı haritayı kaydırıyor mu?
+            
+            // Kullanıcı haritayı kaydırdığında otomatik takibi durdur
+            map.on('dragstart', function() {
+              window.isUserDragging = true;
+            });
+            
+            // Kullanıcı haritayı bıraktığında (otomatik takip devam etmez, sadece marker güncellenir)
+            map.on('dragend', function() {
+              // dragend'de false yapmıyoruz, böylece kullanıcı haritayı kaydırdıktan sonra
+              // otomatik takip devam etmez. Sadece "Konumuma Git" butonuna basıldığında
+              // otomatik takip tekrar aktif olur.
+            });
+            
+            L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+              attribution: '© OpenStreetMap contributors',
+              maxZoom: 19
+            }).addTo(map);
+
+            // Geofence Circle
+            window.geofenceCircle = L.circle([${geofenceLat}, ${geofenceLng}], {
+              color: '${strokeColor}',
+              fillColor: '${fillColor}',
+              fillOpacity: 0.3,
+              radius: ${radius}
+            }).addTo(map);
+
+            // Merkez Marker
+            var centerIcon = L.icon({
+              iconUrl: 'data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iNDAiIGhlaWdodD0iNDAiIHhtbG5zPSJodHRwOi8vd3d3LnczLm9yZy8yMDAwL3N2ZyI+PGNpcmNsZSBjeD0iMjAiIGN5PSIyMCIgcj0iMjAiIGZpbGw9IiNmZmQ4MDAiLz48dGV4dCB4PSIyMCIgeT0iMjUiIGZvbnQtc2l6ZT0iMjAiIHRleHQtYW5jaG9yPSJtaWRkbGUiIGZpbGw9IiMwZjE3MmEiPk08L3RleHQ+PC9zdmc+',
+              iconSize: [40, 40],
+              iconAnchor: [20, 20]
+            });
+            L.marker([${geofenceLat}, ${geofenceLng}], { icon: centerIcon })
+              .addTo(map)
+              .bindPopup('Merkez Noktası');
+
+            // Kullanıcı Marker
+            var userIcon = L.icon({
+              iconUrl: 'data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMzIiIGhlaWdodD0iMzIiIHhtbG5zPSJodHRwOi8vd3d3LnczLm9yZy8yMDAwL3N2ZyI+PGNpcmNsZSBjeD0iMTYiIGN5PSIxNiIgcj0iMTYiIGZpbGw9IiMxMGI5ODEiLz48Y2lyY2xlIGN4PSIxNiIgY3k9IjE2IiByPSIxMiIgZmlsbD0id2hpdGUiLz48L3N2Zz4=',
+              iconSize: [32, 32],
+              iconAnchor: [16, 16]
+            });
+            window.userMarker = L.marker([${centerLat}, ${centerLng}], { icon: userIcon })
+              .addTo(map)
+              .bindPopup('Bulunduğunuz Yer');
+          </script>
+        </body>
+      </html>
+    `;
   };
 
   const handleCheckIn = async () => {
@@ -266,8 +434,10 @@ export default function Home() {
                   // Giriş işlemine devam et
                   proceedWithCheckIn();
                 } catch (error) {
-                  console.error('Otomatik çıkış hatası:', error);
-                  Alert.alert('Hata', 'Otomatik çıkış yapılamadı: ' + error.message);
+                  if (__DEV__) {
+                    console.error('Otomatik çıkış hatası:', error);
+                  }
+                  // Production'da sessizce devam et
                 }
               },
             },
@@ -289,7 +459,9 @@ export default function Home() {
       [
         {
           text: 'İptal',
-          onPress: () => console.log('Giriş iptal edildi'),
+          onPress: () => {
+            if (__DEV__) console.log('Giriş iptal edildi');
+          },
           style: 'cancel',
         },
         {
@@ -323,8 +495,10 @@ export default function Home() {
               setCheckInStatus('checked-in');
               Alert.alert('Başarılı', `Giriş yapıldı - ${now.toLocaleTimeString('tr-TR')}`);
             } catch (error) {
-              console.error('Giriş hatası:', error);
-              Alert.alert('Hata', 'Giriş yapılamadı: ' + error.message);
+              if (__DEV__) {
+                console.error('Giriş hatası:', error);
+              }
+              Alert.alert('Hata', 'Giriş yapılamadı: ' + (error?.message || 'Bilinmeyen hata'));
             } finally {
               setIsProcessing(false);
             }
@@ -368,7 +542,9 @@ export default function Home() {
       [
         {
           text: 'İptal',
-          onPress: () => console.log('Çıkış iptal edildi'),
+          onPress: () => {
+            if (__DEV__) console.log('Çıkış iptal edildi');
+          },
           style: 'cancel',
         },
         {
@@ -391,8 +567,10 @@ export default function Home() {
               setCheckInStatus('checked-out');
               Alert.alert('Başarılı', `Çıkış yapıldı - ${now.toLocaleTimeString('tr-TR')}`);
             } catch (error) {
-              console.error('Çıkış hatası:', error);
-              Alert.alert('Hata', 'Çıkış yapılamadı: ' + error.message);
+              if (__DEV__) {
+                console.error('Çıkış hatası:', error);
+              }
+              Alert.alert('Hata', 'Çıkış yapılamadı: ' + (error?.message || 'Bilinmeyen hata'));
             } finally {
               setIsProcessing(false);
             }
@@ -440,58 +618,18 @@ export default function Home() {
 
       </View>
 
-      {/* Harita */}
+      {/* Harita - OpenStreetMap with Leaflet */}
       {location && (
         <View style={styles.mapContainer}>
-          <MapView
+          <WebView
             ref={mapRef}
+            source={{ html: getMapHTML() }}
             style={{ flex: 1 }}
-            initialRegion={{
-              latitude: location.latitude,
-              longitude: location.longitude,
-              latitudeDelta: 0.01,
-              longitudeDelta: 0.01,
-            }}
-            region={{
-              latitude: location.latitude,
-              longitude: location.longitude,
-              latitudeDelta: 0.01,
-              longitudeDelta: 0.01,
-            }}
-          >
-            {/* Geofence Dairesi */}
-            <Circle
-              center={{
-                latitude: GEOFENCE_CENTER.latitude,
-                longitude: GEOFENCE_CENTER.longitude,
-              }}
-              radius={GEOFENCE_RADIUS}
-              fillColor={isInZone ? 'rgba(16, 185, 129, 0.15)' : 'rgba(239, 68, 68, 0.15)'}
-              strokeColor={isInZone ? '#10b981' : '#ef4444'}
-              strokeWidth={3}
-            />
-
-            {/* Merkez Marker */}
-            <Marker
-              coordinate={{
-                latitude: GEOFENCE_CENTER.latitude,
-                longitude: GEOFENCE_CENTER.longitude,
-              }}
-              title="Merkez Noktası"
-              image={require('../../assets/paxLogoHv4.png')}
-            />
-
-            {/* Kullanıcı Marker */}
-            <Marker
-              coordinate={{
-                latitude: location.latitude,
-                longitude: location.longitude,
-              }}
-              title="Bulunduğunuz Yer"
-              pinColor="#10b981"
-            />
-          </MapView>
-
+            javaScriptEnabled={true}
+            domStorageEnabled={true}
+            startInLoadingState={true}
+            scalesPageToFit={true}
+          />
           {/* Konumuma Git Butonu */}
           <TouchableOpacity
             style={styles.goToLocationButton}
@@ -857,5 +995,25 @@ const styles = StyleSheet.create({
     color: '#fff',
     fontSize: 14,
     fontWeight: '600',
+  },
+  markerContainer: {
+    width: 40,
+    height: 40,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  markerImage: {
+    width: 40,
+    height: 40,
+  },
+  userMarkerContainer: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: '#10b981',
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 2,
+    borderColor: '#fff',
   },
 });

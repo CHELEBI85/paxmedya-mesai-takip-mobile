@@ -50,7 +50,9 @@ export default function Profile() {
         await getProfile(user.uid);
       }
     } catch (err) {
-      console.error('Yenileme hatası:', err);
+      if (__DEV__) {
+        console.error('Yenileme hatası:', err);
+      }
     } finally {
       setRefreshing(false);
     }
@@ -81,10 +83,15 @@ export default function Profile() {
     }
 
     try {
-      console.log('Salvando perfil:', { userId: user.uid, data: formData });
+      if (__DEV__) {
+        console.log('Salvando perfil:', { userId: user.uid, data: formData });
+      }
       
       const result = await updateProfile(user.uid, formData);
-      console.log('Resultado da atualização:', result);
+      
+      if (__DEV__) {
+        console.log('Resultado da atualização:', result);
+      }
       
       // Aguardar um pouco para o Firebase sincronizar
       await new Promise(resolve => setTimeout(resolve, 500));
@@ -95,8 +102,10 @@ export default function Profile() {
       Alert.alert('Başarılı', 'Profil bilgileri güncellendi');
       setIsEditing(false);
     } catch (err) {
-      console.error('Erro ao salvar:', err);
-      Alert.alert('Hata', 'Profil güncellenirken um hata oluştu: ' + (err?.message || 'Desconhecido'));
+      if (__DEV__) {
+        console.error('Erro ao salvar:', err);
+      }
+      Alert.alert('Hata', 'Profil güncellenirken bir hata oluştu: ' + (err?.message || 'Bilinmeyen hata'));
     }
   };
 

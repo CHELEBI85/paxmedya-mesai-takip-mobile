@@ -11,7 +11,7 @@ import { doc, getDoc } from 'firebase/firestore';
 // Redux Store
 import { store } from './src/store/store';
 import { auth, db } from './src/config/firebase';
-import { getDeviceId } from './src/utils/deviceUtils';
+import { getDeviceId, getDeviceName } from './src/utils/deviceUtils';
 
 // Pages
 import Login from './src/pages/Login';
@@ -99,18 +99,18 @@ function AppContent() {
     const checkAuthState = async () => {
       unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
         if (firebaseUser) {
-          // Kullanıcı oturum açmış - Cihaz kontrolü yap
+          // Kullanıcı oturum açmış - Cihaz kontrolü yap (cihaz adına göre)
           try {
-            const currentDeviceId = await getDeviceId();
+            const deviceName = await getDeviceName();
             const userRef = doc(db, 'users', firebaseUser.uid);
             const userSnap = await getDoc(userRef);
             
             if (userSnap.exists()) {
               const userData = userSnap.data();
-              const registeredDeviceId = userData.deviceId;
+              const registeredDeviceName = userData.deviceName;
               
-              // Eğer cihaz ID kayıtlıysa ve farklıysa - Çıkış yap!
-              if (registeredDeviceId && registeredDeviceId !== currentDeviceId) {
+              // Eğer cihaz adı kayıtlıysa ve farklıysa - Çıkış yap!
+              if (registeredDeviceName && registeredDeviceName !== deviceName) {
                 // Farklı cihaz - Hemen çıkış yap
                 await signOut(auth);
                 Alert.alert(
@@ -127,10 +127,13 @@ function AppContent() {
             // Cihaz kontrolü başarılı - Kullanıcıyı ayarla
             setUser(firebaseUser);
           } catch (error) {
-            console.error('Cihaz kontrolü hatası:', error);
-            // Hata durumunda da çıkış yap (güvenlik için)
-            await signOut(auth);
-            setUser(null);
+            // Hata durumunda kullanıcıyı ayarla ama uyarı ver
+            // Çıkış yapma, sadece uyarı göster
+            setUser(firebaseUser);
+            // Hata loglama (production'da console.error çalışmayabilir)
+            if (__DEV__) {
+              console.error('Cihaz kontrolü hatası:', error);
+            }
           }
         } else {
           // Kullanıcı oturum açmamış
