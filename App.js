@@ -8,7 +8,7 @@ import { Provider } from 'react-redux';
 import { onAuthStateChanged, signOut } from 'firebase/auth';
 import { doc, getDoc } from 'firebase/firestore';
 
-// Redux Store
+// Redux Storee
 import { store } from './src/store/store';
 import { auth, db } from './src/config/firebase';
 import { getDeviceId, getDeviceName } from './src/utils/deviceUtils';
