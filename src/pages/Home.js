@@ -13,6 +13,7 @@ import { WebView } from 'react-native-webview';
 import { MaterialIcons } from '@expo/vector-icons';
 import { useAuth } from '../hooks/useAuth';
 import { useDatabase } from '../hooks/useDatabase';
+import CelebrationModal from '../components/CelebrationModal';
 import * as Location from 'expo-location';
 
 // Geofence Ayarları
@@ -65,6 +66,8 @@ export default function Home() {
   const [isProcessing, setIsProcessing] = useState(false);
   const [recordId, setRecordId] = useState(null); // Dokument ID'sini sakla
   const [hasShownAutoCheckoutAlert, setHasShownAutoCheckoutAlert] = useState(false);
+  const [celebrationVisible, setCelebrationVisible] = useState(false);
+  const [celebrationType, setCelebrationType] = useState('check-in');
 
   // Profil bilgisini yükle
   useEffect(() => {
@@ -493,7 +496,8 @@ export default function Home() {
 
               setCheckInTime(now);
               setCheckInStatus('checked-in');
-              Alert.alert('Başarılı', `Giriş yapıldı - ${now.toLocaleTimeString('tr-TR')}`);
+              setCelebrationType('check-in');
+              setCelebrationVisible(true);
             } catch (error) {
               if (__DEV__) {
                 console.error('Giriş hatası:', error);
@@ -565,7 +569,8 @@ export default function Home() {
 
               setCheckOutTime(now);
               setCheckInStatus('checked-out');
-              Alert.alert('Başarılı', `Çıkış yapıldı - ${now.toLocaleTimeString('tr-TR')}`);
+              setCelebrationType('check-out');
+              setCelebrationVisible(true);
             } catch (error) {
               if (__DEV__) {
                 console.error('Çıkış hatası:', error);
@@ -762,6 +767,14 @@ export default function Home() {
           </View>
         )}
       </View>
+
+      {/* Celebration Modal */}
+      <CelebrationModal
+        visible={celebrationVisible}
+        type={celebrationType}
+        userName={userProfile?.displayName || ''}
+        onClose={() => setCelebrationVisible(false)}
+      />
     </ScrollView>
   );
 }
