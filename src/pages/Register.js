@@ -6,12 +6,12 @@ import {
   TouchableOpacity,
   StyleSheet,
   ActivityIndicator,
-  Alert,
   ScrollView,
   Image,
 } from 'react-native';
 import { MaterialIcons } from '@expo/vector-icons';
 import { useAuth } from '../hooks/useAuth';
+import ConfirmModal from '../components/ConfirmModal';
 
 export default function Register({ navigation }) {
   const [formData, setFormData] = useState({
@@ -22,21 +22,25 @@ export default function Register({ navigation }) {
     phone: '',
   });
   const { register, loading, error } = useAuth();
+  const [modal, setModal] = useState({ visible: false, title: '', message: '', iconColor: '#ef4444' });
+
+  const showInfo = (title, message, iconColor = '#ef4444') =>
+    setModal({ visible: true, title, message, iconColor });
+  const hideModal = () => setModal((m) => ({ ...m, visible: false }));
 
   const handleRegister = async () => {
-    // Validasyon
     if (!formData.email || !formData.password || !formData.displayName) {
-      Alert.alert('Hata', 'Lütfen zorunlu alanları doldurun (Email, Şifre, Ad Soyad)');
+      showInfo('Hata', 'Lütfen zorunlu alanları doldurun (Email, Şifre, Ad Soyad).');
       return;
     }
 
     if (formData.password !== formData.confirmPassword) {
-      Alert.alert('Hata', 'Şifreler eşleşmiyor');
+      showInfo('Hata', 'Şifreler eşleşmiyor.');
       return;
     }
 
     if (formData.password.length < 6) {
-      Alert.alert('Hata', 'Şifre en az 6 karakter olmalıdır');
+      showInfo('Hata', 'Şifre en az 6 karakter olmalıdır.');
       return;
     }
 
@@ -47,14 +51,10 @@ export default function Register({ navigation }) {
       });
 
       if (result.payload) {
-        Alert.alert(
-          'Başarılı',
-          'Kayıt başarıyla tamamlandı! Otomatik olarak giriş yapılıyor...'
-        );
-        // Firebase Auth otomatik giriş yapacak, navigation gerekmez
+        showInfo('Başarılı', 'Kayıt başarıyla tamamlandı! Otomatik olarak giriş yapılıyor...', '#10b981');
       }
     } catch (err) {
-      Alert.alert('Kayıt Hatası', error || 'Kayıt yapılamadı');
+      showInfo('Kayıt Hatası', error || 'Kayıt yapılamadı.');
     }
   };
 
@@ -157,16 +157,24 @@ export default function Register({ navigation }) {
           Zaten hesabınız var mı?{' '}
           <Text
             style={styles.loginLink}
-            onPress={() => {
-              if (navigation) {
-                navigation.goBack();
-              }
-            }}
+            onPress={() => { if (navigation) navigation.goBack(); }}
           >
             Giriş yapın
           </Text>
         </Text>
       </View>
+
+      <ConfirmModal
+        visible={modal.visible}
+        icon="info"
+        iconColor={modal.iconColor}
+        title={modal.title}
+        message={modal.message}
+        confirmText="Tamam"
+        hideCancel
+        onConfirm={hideModal}
+        onCancel={hideModal}
+      />
     </ScrollView>
   );
 }

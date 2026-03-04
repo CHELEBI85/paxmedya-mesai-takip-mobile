@@ -17,7 +17,8 @@
       "bundleIdentifier": "com.paxmedya.mesaitakip",
       "infoPlist": {
         "NSLocationWhenInUseUsageDescription": "Mesai girisi ve cikisi icin konumunuza ihtiyacimiz var.",
-        "NSLocationAlwaysUsageDescription": "Mesai girisi ve cikisi icin konumunuza ihtiyacimiz var."
+        "NSLocationAlwaysUsageDescription": "Mesai girisi ve cikisi icin konumunuza ihtiyacimiz var.",
+        "NSCameraUsageDescription": "QR kod taramak icin kamera izni gereklidir."
       }
     },
     "android": {
@@ -29,7 +30,12 @@
       "package": "com.paxmedya.mesaitakip",
       "permissions": [
         "ACCESS_FINE_LOCATION",
-        "ACCESS_COARSE_LOCATION"
+        "ACCESS_COARSE_LOCATION",
+        "CAMERA",
+        "RECEIVE_BOOT_COMPLETED",
+        "VIBRATE",
+        "WAKE_LOCK",
+        "SCHEDULE_EXACT_ALARM"
       ]
     },
     "web": {
@@ -42,7 +48,20 @@
           "locationAlwaysAndWhenInUsePermission": "Mesai girisi ve cikisi icin konumunuza ihtiyacimiz var."
         }
       ],
-      "expo-font"
+      "expo-font",
+      [
+        "expo-notifications",
+        {
+          "icon": "./assets/logo.png",
+          "color": "#ffd800"
+        }
+      ],
+      [
+        "expo-camera",
+        {
+          "cameraPermission": "QR kod taramak icin kamera izni gereklidir."
+        }
+      ]
     ]
   }
 }

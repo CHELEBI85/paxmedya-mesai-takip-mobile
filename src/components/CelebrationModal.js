@@ -23,6 +23,39 @@ const CHECK_IN_MESSAGES = [
   { text: 'Erken gelen mi? Bu saatte mi? Bravo!', sub: 'Tam bir profesyonel gibi geldin!' },
   { text: 'GPS seni bulduğuna göre başlarsın artık!', sub: 'Medya dünyası seni bekliyor!' },
   { text: 'Ofise girince hava değişti, hoş geldin!', sub: 'Bugünkü yayın akışı seninle başlıyor!' },
+
+  { text: 'Stüdyo seni görünce toparlandı!', sub: 'Enerjinle güne start ver!' },
+  { text: 'Sahne hazır, ışıklar açık!', sub: 'Başrol sensin, unutma.' },
+  { text: 'Tam zamanında giriş yaptın!', sub: 'Bugün de güzel işler çıkacak.' },
+  { text: 'Takım tamamlandı, eksik parça geldi!', sub: 'Hadi üretmeye başlayalım.' },
+  { text: 'Bugünün enerjisi geldi!', sub: 'Hadi bakalım, harika işler seni bekliyor.' },
+  { text: 'Ofis seni fark etti!', sub: 'Şimdi sıra üretimde.' },
+  { text: 'Bugünün kahramanı giriş yaptı!', sub: 'Göster kendini!' },
+  { text: 'Kapı açıldı ve enerji içeri girdi!', sub: 'Hoş geldin, gün başlasın.' },
+  { text: 'Set artık tamam!', sub: 'Çünkü sen geldin.' },
+  { text: 'Bugün de sahne senin!', sub: 'Harika işler çıkaracağına eminiz.' },
+
+  { text: 'Hoş geldin, ekip seni bekliyordu!', sub: 'Bugün üretim günü.' },
+  { text: 'Ofis sensiz eksikti!', sub: 'Şimdi tamamlandı.' },
+  { text: 'Geldin mi? O zaman başlıyoruz!', sub: 'Bugün güzel olacak.' },
+  { text: 'Sistem seni tanıdı!', sub: 'Şimdi üretme zamanı.' },
+  { text: 'Enerji seviyesi yükseldi!', sub: 'Sebep: sen geldin.' },
+  { text: 'Stüdyo hareketlendi!', sub: 'Çünkü sen giriş yaptın.' },
+  { text: 'Bugün işler hızlanacak gibi!', sub: 'Sen gelince hep öyle olur.' },
+  { text: 'Ekibin motivasyonu arttı!', sub: 'Hoş geldin!' },
+  { text: 'Yeni sahne başladı!', sub: 'Başrol yine sende.' },
+  { text: 'Sahne hazır, ekip hazır!', sub: 'Şimdi sen hazırsın.' },
+
+  { text: 'Bugün üretken bir gün olacak gibi!', sub: 'İlk adımı attın bile.' },
+  { text: 'Ofis bugün biraz daha parlak!', sub: 'Sebebi belli.' },
+  { text: 'Hoş geldin, tempo başlıyor!', sub: 'Hazırsan başlayalım.' },
+  { text: 'Enerji geldi, sistem çalışıyor!', sub: 'Bugün güzel işler çıkacak.' },
+  { text: 'Takım tamamlandı!', sub: 'Şimdi üretim zamanı.' },
+  { text: 'Hoş geldin, gün resmen başladı!', sub: 'Sahne seni bekliyor.' },
+  { text: 'Bugün de fark yaratma günü!', sub: 'Hadi bakalım.' },
+  { text: 'Stüdyo seni fark etti!', sub: 'Enerjin hissediliyor.' },
+  { text: 'Bugünün başlangıcı yapıldı!', sub: 'Ve sen buradasın.' },
+  { text: 'Hoş geldin, üretim başlasın!', sub: 'Bugün iyi işler çıkaracağız.' }
 ];
 
 const CHECK_OUT_MESSAGES = [
@@ -37,6 +70,168 @@ const CHECK_OUT_MESSAGES = [
   { text: 'Sen gidince ofis karanlığa gömülüyor!', sub: 'Ama olsun, iyi geceler yıldızımız!' },
   { text: 'Bugün ekstra çalıştın mı ne, gözlerin yorgun!', sub: 'Kolay gelsin, hak ettin bu molayı!' },
 ];
+
+// Özel kullanıcı mesajları (userId -> giriş/çıkış mesajları). Yeni kullanıcı eklemek için buraya ekle.
+const SPECIAL_USER_MESSAGES = {
+  AYDuSzM4VuV0JZCOm845m64XiRe2: {
+    checkIn: [
+      { text: 'Heval geldi, ofisin enerjisi yükseldi!', sub: 'Bugün de sağlam işler çıkacak.' },
+      { text: 'Doğudan rüzgar esti!', sub: 'Mesai şimdi başlıyor.' },
+      { text: 'Halay başı geldi!', sub: 'Ekip tamamlandı.' },
+      { text: 'Dengbêj gibi ağır giriş yaptın!', sub: 'Sahne senin.' },
+      { text: 'Heval sahaya indi!', sub: 'Bugün üretim var.' },
+      { text: 'Kürt gücü ofise ulaştı!', sub: 'Şimdi çalışmaya başlayalım.' },
+      { text: 'Doğu disiplini geldi!', sub: 'Herkes hazır olsun.' },
+      { text: 'Çaylar hazır, heval geldi!', sub: 'Mesai başlasın.' },
+      { text: 'Dağlardan enerji indi!', sub: 'Ofis canlandı.' },
+      { text: 'Heval sahnede!', sub: 'Bugün işler hızlı gider.' },
+      
+      { text: 'Kürt motivasyonu geldi!', sub: 'Bugün güzel işler çıkar.' },
+      { text: 'Halay ritmi başladı!', sub: 'Ekip tamam.' },
+      { text: 'Heval giriş yaptı!', sub: 'Sistem sevindi.' },
+      { text: 'Doğunun enerjisi ofiste!', sub: 'Bugün sağlam üretim var.' },
+      { text: 'Dengbêj havası geldi!', sub: 'Gün başladı.' },
+      { text: 'Heval geldiğine göre mesai başlar!', sub: 'Hadi bakalım.' },
+      { text: 'Kürt sabrı devrede!', sub: 'Bugün de başaracağız.' },
+      { text: 'Dağ gibi sağlam giriş!', sub: 'Ofis hazır.' },
+      { text: 'Heval kapıyı açtı!', sub: 'Enerji içeri girdi.' },
+      { text: 'Doğu ekibi sahnede!', sub: 'Bugün hareketli geçecek.' },
+      
+      { text: 'Halay başı geldi!', sub: 'Şimdi ritim başlar.' },
+      { text: 'Heval ofise indi!', sub: 'Sistem aktif.' },
+      { text: 'Kürt enerjisi geldi!', sub: 'Çalışma modu açıldı.' },
+      { text: 'Doğudan selam var!', sub: 'Mesai başlasın.' },
+      { text: 'Heval geldi, ekip tamam!', sub: 'Bugün üretim var.' },
+      { text: 'Dengbêj gibi ağır giriş!', sub: 'Sahne senin.' },
+      { text: 'Dağ gibi sağlam duruş!', sub: 'Gün başlıyor.' },
+      { text: 'Kürt motivasyonu devrede!', sub: 'Hadi üretelim.' },
+      { text: 'Heval geldiğine göre işler yürür!', sub: 'Başlayalım.' },
+      { text: 'Ofise doğu havası geldi!', sub: 'Bugün güzel olacak.' },
+      
+      { text: 'Heval kapıdan girdi!', sub: 'Enerji arttı.' },
+      { text: 'Kürt karizması geldi!', sub: 'Ofis toparlandı.' },
+      { text: 'Doğu temposu başladı!', sub: 'Herkes hazır.' },
+      { text: 'Halay başı pozisyon aldı!', sub: 'Şimdi iş zamanı.' },
+      { text: 'Heval geldi, gün başladı!', sub: 'Hadi bakalım.' },
+      { text: 'Dağ rüzgarı ofise ulaştı!', sub: 'Bugün hızlı geçer.' },
+      { text: 'Kürt sabrı devrede!', sub: 'İşler yoluna girer.' },
+      { text: 'Heval giriş yaptı!', sub: 'Sistem tamam.' },
+      { text: 'Doğu gücü burada!', sub: 'Gün şimdi başlıyor.' },
+      { text: 'Ofis seni bekliyordu heval!', sub: 'Şimdi başlayalım.' },
+      
+      { text: 'Halay ritmi ofise geldi!', sub: 'Enerji yükseldi.' },
+      { text: 'Heval sahaya indi!', sub: 'Oyun başlasın.' },
+      { text: 'Kürt temposu başladı!', sub: 'Mesai aktif.' },
+      { text: 'Dağ gibi sağlam geldin!', sub: 'Bugün iyi geçer.' },
+      { text: 'Heval geldi, ofis canlandı!', sub: 'Başlayalım.' },
+      { text: 'Doğudan enerji geldi!', sub: 'Sistem mutlu.' },
+      { text: 'Kürt kararlılığı burada!', sub: 'Gün güzel geçecek.' },
+      { text: 'Halay başı pozisyon aldı!', sub: 'İş başlasın.' },
+      { text: 'Heval geldiğine göre tamamız!', sub: 'Ekip hazır.' },
+      { text: 'Ofise doğu güneşi doğdu!', sub: 'Mesai başladı.' },
+      
+      { text: 'Heval sahnede!', sub: 'Bugün üretim var.' },
+      { text: 'Kürt gücü geldi!', sub: 'Enerji yükseldi.' },
+      { text: 'Dağ rüzgarı esti!', sub: 'Ofis hareketlendi.' },
+      { text: 'Halay başı geldi!', sub: 'Ritim başlasın.' },
+      { text: 'Heval giriş yaptı!', sub: 'Gün başladı.' },
+      { text: 'Doğu disiplini burada!', sub: 'Herkes hazır.' },
+      { text: 'Kürt motivasyonu geldi!', sub: 'Bugün üretelim.' },
+      { text: 'Heval geldi, ekip tamamlandı!', sub: 'Mesai başladı.' },
+      { text: 'Dağ gibi sağlam giriş!', sub: 'Ofis hazır.' },
+      { text: 'Doğudan selam var!', sub: 'Hadi çalışalım.' },
+      
+      { text: 'Heval kapıdan girdi!', sub: 'Enerji yükseldi.' },
+      { text: 'Kürt karizması ofiste!', sub: 'Bugün güzel geçer.' },
+      { text: 'Halay başı geldi!', sub: 'Ekip tamam.' },
+      { text: 'Dağ enerjisi geldi!', sub: 'Ofis canlandı.' },
+      { text: 'Heval sahnede!', sub: 'İş başlasın.' },
+      { text: 'Doğu gücü burada!', sub: 'Mesai başladı.' },
+      { text: 'Kürt motivasyonu devrede!', sub: 'Hadi üretelim.' },
+      { text: 'Halay ritmi geldi!', sub: 'Enerji yükseldi.' },
+      { text: 'Heval geldiğine göre tamamız!', sub: 'Bugün güzel işler var.' },
+      { text: 'Doğu havası ofiste!', sub: 'Mesai başladı.' }
+      ],
+      checkOut: [
+        { text: 'Heval bugün de işi bitirdi!', sub: 'Şimdi çay zamanı.' },
+        { text: 'Bugün de sağlam çalıştın heval!', sub: 'Dinlenmeyi hak ettin.' },
+        { text: 'Halay başı bugünlük sahneden indi!', sub: 'Yarın yine buradayız.' },
+        { text: 'Doğu disiplini bugün de iş yaptı!', sub: 'İyi akşamlar heval.' },
+        { text: 'Heval mesaiyi kapattı!', sub: 'Şimdi dinlenme zamanı.' },
+        { text: 'Bugün de dağ gibi çalıştın!', sub: 'Helal olsun.' },
+        { text: 'Kürt sabrı yine kazandı!', sub: 'İyi akşamlar.' },
+        { text: 'Heval görevi tamamladı!', sub: 'Yarın devam.' },
+        { text: 'Bugünün emeği bitti!', sub: 'Çay demle heval.' },
+        { text: 'Ofis bugünlük senden razı!', sub: 'İyi akşamlar.' },
+        
+        { text: 'Heval bugün de sahneyi kapattı!', sub: 'Yarın yeni bölüm.' },
+        { text: 'Mesai bitti heval!', sub: 'Şimdi rahatlama zamanı.' },
+        { text: 'Halay bitti!', sub: 'Dinlenme başladı.' },
+        { text: 'Bugün de sağlam performans!', sub: 'Helal sana.' },
+        { text: 'Heval günü kapattı!', sub: 'İyi dinlen.' },
+        { text: 'Doğu gücü bugünlük tamam!', sub: 'Yarın görüşürüz.' },
+        { text: 'Kürt motivasyonu görevini yaptı!', sub: 'İyi akşamlar.' },
+        { text: 'Bugün de güzel çalıştın!', sub: 'Dinlen heval.' },
+        { text: 'Ekip senden memnun!', sub: 'İyi akşamlar.' },
+        { text: 'Heval bugünlük sistemi kapattı!', sub: 'Yarın açarız.' },
+        
+        { text: 'Bugün de işi hallettin!', sub: 'Şimdi çay içme zamanı.' },
+        { text: 'Heval görev tamam!', sub: 'Dinlenmeyi unutma.' },
+        { text: 'Mesai başarıyla bitti!', sub: 'Helal sana.' },
+        { text: 'Bugün de güzel iş çıkardın!', sub: 'İyi akşamlar.' },
+        { text: 'Doğu temposu bugünlük durdu!', sub: 'Yarın devam.' },
+        { text: 'Halay başı bugünlük dağıldı!', sub: 'Dinlen.' },
+        { text: 'Heval bugün de fark yarattı!', sub: 'İyi akşamlar.' },
+        { text: 'Bugün de işi bitirdin!', sub: 'Hak ettin.' },
+        { text: 'Kürt azmi yine kazandı!', sub: 'Dinlen heval.' },
+        { text: 'Ofis bugünlük seni uğurluyor!', sub: 'Yarın görüşürüz.' },
+        
+        { text: 'Heval bugün de sahneyi kapattı!', sub: 'Yarın yine açarız.' },
+        { text: 'Bugün de sağlam mesai!', sub: 'Helal olsun.' },
+        { text: 'Mesai tamamlandı!', sub: 'İyi dinlen.' },
+        { text: 'Bugün de görev bitti!', sub: 'Yarın devam.' },
+        { text: 'Heval günü kapattı!', sub: 'Dinlenmeye geç.' },
+        { text: 'Halay ritmi bugünlük durdu!', sub: 'Yarın yine başlar.' },
+        { text: 'Bugün de iyi çalıştın!', sub: 'İyi akşamlar.' },
+        { text: 'Doğu enerjisi bugünlük tamam!', sub: 'Dinlen heval.' },
+        { text: 'Ekip senden razı!', sub: 'Yarın yine bekliyoruz.' },
+        { text: 'Heval görevi bitirdi!', sub: 'Şimdi mola zamanı.' },
+        
+        { text: 'Bugün de sağlam performans!', sub: 'Helal sana.' },
+        { text: 'Mesai tamamlandı!', sub: 'İyi akşamlar.' },
+        { text: 'Heval bugün de işi bitirdi!', sub: 'Dinlen.' },
+        { text: 'Bugün de görev tamam!', sub: 'Yarın devam.' },
+        { text: 'Doğu temposu kapandı!', sub: 'Dinlen heval.' },
+        { text: 'Halay başı bugünlük kapattı!', sub: 'Yarın görüşürüz.' },
+        { text: 'Bugün de emeğin büyük!', sub: 'Helal olsun.' },
+        { text: 'Heval günü kapattı!', sub: 'Şimdi rahatla.' },
+        { text: 'Mesai başarıyla tamam!', sub: 'İyi akşamlar.' },
+        { text: 'Bugün de işi bitirdin!', sub: 'Dinlenmeyi hak ettin.' },
+        
+        { text: 'Heval bugün de çalıştı!', sub: 'Şimdi çay zamanı.' },
+        { text: 'Bugün de iyi performans!', sub: 'Helal sana.' },
+        { text: 'Mesai tamamlandı!', sub: 'Dinlen.' },
+        { text: 'Heval görevini yaptı!', sub: 'İyi akşamlar.' },
+        { text: 'Bugün de üretim vardı!', sub: 'Yarın yine olur.' },
+        { text: 'Halay bitti!', sub: 'Dinlenme başladı.' },
+        { text: 'Doğu gücü bugünlük kapandı!', sub: 'Yarın görüşürüz.' },
+        { text: 'Heval sahneden indi!', sub: 'İyi akşamlar.' },
+        { text: 'Bugün de işi hallettin!', sub: 'Helal sana.' },
+        { text: 'Mesai tamam!', sub: 'Dinlen heval.' },
+        
+        { text: 'Heval günü bitirdi!', sub: 'Şimdi rahatla.' },
+        { text: 'Bugün de sağlam çalıştın!', sub: 'İyi akşamlar.' },
+        { text: 'Mesai kapandı!', sub: 'Yarın görüşürüz.' },
+        { text: 'Halay başı dağıldı!', sub: 'Dinlen.' },
+        { text: 'Heval bugün de iyi iş çıkardı!', sub: 'Helal olsun.' },
+        { text: 'Doğu sabrı yine kazandı!', sub: 'İyi akşamlar.' },
+        { text: 'Bugün de emeğin büyük!', sub: 'Dinlen.' },
+        { text: 'Heval görevi tamamladı!', sub: 'Yarın devam.' },
+        { text: 'Mesai bitti!', sub: 'Dinlen heval.' },
+        { text: 'Bugün de güzel iş çıkardın!', sub: 'İyi akşamlar.' }
+        ]
+  },
+};
 
 const CONFETTI_COLORS = [
   '#FF6B6B', '#4ECDC4', '#45B7D1', '#96CEB4', '#FFEAA7',
@@ -56,14 +251,21 @@ const SPARKLE_POSITIONS = [
   { top: '70%', right: '20%' },
 ];
 
-export default function CelebrationModal({ visible, type, userName, onClose }) {
+export default function CelebrationModal({ visible, type, userName, userId, onClose }) {
   const isCheckIn = type === 'check-in';
 
-  // Pick a random message when modal becomes visible
+  // Özel kullanıcı varsa onun mesajları, yoksa varsayılan liste
   const message = useMemo(() => {
-    const messages = isCheckIn ? CHECK_IN_MESSAGES : CHECK_OUT_MESSAGES;
-    return messages[Math.floor(Math.random() * messages.length)];
-  }, [visible, isCheckIn]);
+    const special = userId && SPECIAL_USER_MESSAGES[userId];
+    const list = special
+      ? (isCheckIn ? special.checkIn : special.checkOut)
+      : (isCheckIn ? CHECK_IN_MESSAGES : CHECK_OUT_MESSAGES);
+    if (!list || list.length === 0) {
+      const fallback = isCheckIn ? CHECK_IN_MESSAGES : CHECK_OUT_MESSAGES;
+      return fallback[Math.floor(Math.random() * fallback.length)];
+    }
+    return list[Math.floor(Math.random() * list.length)];
+  }, [visible, isCheckIn, userId]);
 
   // Animation values
   const overlayOpacity = useRef(new Animated.Value(0)).current;

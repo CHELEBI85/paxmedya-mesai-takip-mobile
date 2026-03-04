@@ -1,94 +1,76 @@
 import { createSlice, createAsyncThunk } from '@reduxjs/toolkit';
-import { 
-  collection, 
-  addDoc, 
-  getDocs, 
-  updateDoc, 
-  deleteDoc, 
+import {
+  collection,
+  addDoc,
+  getDocs,
+  updateDoc,
+  deleteDoc,
   doc,
   query,
   where,
   getDoc,
   setDoc,
-  orderBy,
-  limit
 } from 'firebase/firestore';
 import { db } from '../../config/firebase';
+import cacheService from '../../services/cacheService';
+import { CACHE_KEYS } from '../../config/appConfig';
 
-// Async Thunks
-
-// Kullanıcı profil bilgisini getir
 export const getUserProfile = createAsyncThunk(
   'database/getUserProfile',
   async ({ userId }, { rejectWithValue }) => {
     try {
       const userRef = doc(db, 'users', userId);
       const userSnap = await getDoc(userRef);
-      
+
       if (userSnap.exists()) {
         const data = userSnap.data();
-        // Timestamp'leri string'e çevir
-        return {
+        const profile = {
           id: userSnap.id,
           ...data,
           createdAt: data.createdAt?.toDate?.()?.toISOString() || data.createdAt,
           updatedAt: data.updatedAt?.toDate?.()?.toISOString() || data.updatedAt,
           deviceRegisteredAt: data.deviceRegisteredAt?.toDate?.()?.toISOString() || data.deviceRegisteredAt,
         };
+        await cacheService.set(CACHE_KEYS.USER_PROFILE + '_' + userId, profile);
+        return profile;
       } else {
         return rejectWithValue('Kullanıcı profili bulunamadı');
       }
     } catch (error) {
+      const cached = await cacheService.getAny(CACHE_KEYS.USER_PROFILE + '_' + userId);
+      if (cached) return cached;
       return rejectWithValue(error.message);
     }
   }
 );
 
-// Kullanıcı profil bilgisini güncelle
 export const updateUserProfile = createAsyncThunk(
   'database/updateUserProfile',
   async ({ userId, data }, { rejectWithValue }) => {
     try {
-      if (__DEV__) {
-        console.log('Iniciando atualização de perfil:', { userId, data });
-      }
       const userRef = doc(db, 'users', userId);
-      
-      // setDoc com merge: true -> oluşturur veya günceller
-      await setDoc(userRef, {
-        ...data,
-        updatedAt: new Date(),
-      }, { merge: true });
-      
-      if (__DEV__) {
-        console.log('Perfil atualizado com sucesso');
-      }
+      await setDoc(userRef, { ...data, updatedAt: new Date() }, { merge: true });
       return { id: userId, ...data };
     } catch (error) {
-      if (__DEV__) {
-        console.error('Erro ao atualizar perfil:', error);
-      }
       return rejectWithValue(error.message);
     }
   }
 );
 
-// Çalışma kayıtlarını getir
 export const fetchWorkRecords = createAsyncThunk(
   'database/fetchWorkRecords',
   async ({ userId }, { rejectWithValue }) => {
     try {
-      const workRecordsRef = collection(db, 'workRecords');
-      const q = query(workRecordsRef, where('userId', '==', userId));
-      const querySnapshot = await getDocs(q);
-      
+      const q = query(collection(db, 'workRecords'), where('userId', '==', userId));
+      const snapshot = await getDocs(q);
       const records = [];
-      querySnapshot.forEach((doc) => {
-        records.push({ id: doc.id, ...doc.data() });
-      });
-      
+      snapshot.forEach((d) => records.push({ id: d.id, ...d.data() }));
+
+      await cacheService.set(CACHE_KEYS.WORK_RECORDS + '_' + userId, records);
       return records;
     } catch (error) {
+      const cached = await cacheService.getAny(CACHE_KEYS.WORK_RECORDS + '_' + userId);
+      if (cached) return cached;
       return rejectWithValue(error.message);
     }
   }
@@ -135,23 +117,17 @@ export const deleteWorkRecord = createAsyncThunk(
   }
 );
 
-const initialState = {
-  records: [],
-  userProfile: null,
-  loading: false,
-  error: null,
-};
-
 const databaseSlice = createSlice({
   name: 'database',
-  initialState,
+  initialState: {
+    records: [],
+    userProfile: null,
+    loading: false,
+    error: null,
+  },
   extraReducers: (builder) => {
-    // Get User Profile
     builder
-      .addCase(getUserProfile.pending, (state) => {
-        state.loading = true;
-        state.error = null;
-      })
+      .addCase(getUserProfile.pending, (state) => { state.loading = true; state.error = null; })
       .addCase(getUserProfile.fulfilled, (state, action) => {
         state.loading = false;
         state.userProfile = action.payload;
@@ -162,12 +138,8 @@ const databaseSlice = createSlice({
         state.error = action.payload;
       });
 
-    // Update User Profile
     builder
-      .addCase(updateUserProfile.pending, (state) => {
-        state.loading = true;
-        state.error = null;
-      })
+      .addCase(updateUserProfile.pending, (state) => { state.loading = true; state.error = null; })
       .addCase(updateUserProfile.fulfilled, (state, action) => {
         state.loading = false;
         state.userProfile = { ...state.userProfile, ...action.payload };
@@ -178,12 +150,8 @@ const databaseSlice = createSlice({
         state.error = action.payload;
       });
 
-    // Fetch Records
     builder
-      .addCase(fetchWorkRecords.pending, (state) => {
-        state.loading = true;
-        state.error = null;
-      })
+      .addCase(fetchWorkRecords.pending, (state) => { state.loading = true; state.error = null; })
       .addCase(fetchWorkRecords.fulfilled, (state, action) => {
         state.loading = false;
         state.records = action.payload;
@@ -194,12 +162,8 @@ const databaseSlice = createSlice({
         state.error = action.payload;
       });
 
-    // Add Record
     builder
-      .addCase(addWorkRecord.pending, (state) => {
-        state.loading = true;
-        state.error = null;
-      })
+      .addCase(addWorkRecord.pending, (state) => { state.loading = true; state.error = null; })
       .addCase(addWorkRecord.fulfilled, (state, action) => {
         state.loading = false;
         state.records.push(action.payload);
@@ -210,18 +174,12 @@ const databaseSlice = createSlice({
         state.error = action.payload;
       });
 
-    // Update Record
     builder
-      .addCase(updateWorkRecord.pending, (state) => {
-        state.loading = true;
-        state.error = null;
-      })
+      .addCase(updateWorkRecord.pending, (state) => { state.loading = true; state.error = null; })
       .addCase(updateWorkRecord.fulfilled, (state, action) => {
         state.loading = false;
-        const index = state.records.findIndex(r => r.id === action.payload.id);
-        if (index !== -1) {
-          state.records[index] = { ...state.records[index], ...action.payload };
-        }
+        const index = state.records.findIndex((r) => r.id === action.payload.id);
+        if (index !== -1) state.records[index] = { ...state.records[index], ...action.payload };
         state.error = null;
       })
       .addCase(updateWorkRecord.rejected, (state, action) => {
@@ -229,15 +187,11 @@ const databaseSlice = createSlice({
         state.error = action.payload;
       });
 
-    // Delete Record
     builder
-      .addCase(deleteWorkRecord.pending, (state) => {
-        state.loading = true;
-        state.error = null;
-      })
+      .addCase(deleteWorkRecord.pending, (state) => { state.loading = true; state.error = null; })
       .addCase(deleteWorkRecord.fulfilled, (state, action) => {
         state.loading = false;
-        state.records = state.records.filter(r => r.id !== action.payload);
+        state.records = state.records.filter((r) => r.id !== action.payload);
         state.error = null;
       })
       .addCase(deleteWorkRecord.rejected, (state, action) => {

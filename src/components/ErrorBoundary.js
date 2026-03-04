@@ -1,9 +1,8 @@
 import React from 'react';
 import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
 import { MaterialIcons } from '@expo/vector-icons';
-import { auth } from '../config/firebase';
 
-export default class ProtectedScreen extends React.Component {
+export default class ErrorBoundary extends React.Component {
   state = { hasError: false, error: null };
 
   static getDerivedStateFromError(error) {
@@ -11,10 +10,10 @@ export default class ProtectedScreen extends React.Component {
   }
 
   componentDidCatch(error, errorInfo) {
-    if (__DEV__) console.error('ProtectedScreen error:', error, errorInfo);
+    if (__DEV__) console.error('ErrorBoundary:', error, errorInfo);
   }
 
-  handleRetry = () => {
+  handleReset = () => {
     this.setState({ hasError: false, error: null });
   };
 
@@ -22,36 +21,23 @@ export default class ProtectedScreen extends React.Component {
     if (this.state.hasError) {
       return (
         <View style={styles.container}>
-          <MaterialIcons name="error-outline" size={48} color="#ef4444" />
-          <Text style={styles.title}>Ekran Hatası</Text>
+          <MaterialIcons name="error-outline" size={64} color="#ef4444" />
+          <Text style={styles.title}>Bir Hata Oluştu</Text>
           <Text style={styles.message}>
-            Bu ekranda beklenmeyen bir hata oluştu.
+            Beklenmeyen bir hata meydana geldi. Lütfen tekrar deneyin.
           </Text>
           {__DEV__ && this.state.error && (
             <Text style={styles.errorDetail}>
               {this.state.error.toString()}
             </Text>
           )}
-          <TouchableOpacity style={styles.button} onPress={this.handleRetry}>
-            <MaterialIcons name="refresh" size={18} color="#0f172a" />
+          <TouchableOpacity style={styles.button} onPress={this.handleReset}>
+            <MaterialIcons name="refresh" size={20} color="#0f172a" />
             <Text style={styles.buttonText}>Tekrar Dene</Text>
           </TouchableOpacity>
         </View>
       );
     }
-
-    if (!auth.currentUser) {
-      return (
-        <View style={styles.container}>
-          <MaterialIcons name="lock" size={48} color="#ffd800" />
-          <Text style={styles.title}>Oturum Gerekli</Text>
-          <Text style={styles.message}>
-            Bu sayfayı görüntülemek için giriş yapmalısınız.
-          </Text>
-        </View>
-      );
-    }
-
     return this.props.children;
   }
 }
@@ -62,19 +48,19 @@ const styles = StyleSheet.create({
     backgroundColor: '#0f172a',
     justifyContent: 'center',
     alignItems: 'center',
-    gap: 12,
     padding: 32,
+    gap: 16,
   },
   title: {
-    fontSize: 18,
-    fontWeight: '700',
+    fontSize: 22,
+    fontWeight: '800',
     color: '#f8fafc',
   },
   message: {
-    fontSize: 13,
+    fontSize: 14,
     color: '#94a3b8',
     textAlign: 'center',
-    lineHeight: 20,
+    lineHeight: 22,
   },
   errorDetail: {
     fontSize: 11,
@@ -89,14 +75,14 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     backgroundColor: '#ffd800',
-    paddingVertical: 10,
-    paddingHorizontal: 20,
+    paddingVertical: 12,
+    paddingHorizontal: 24,
     borderRadius: 10,
-    gap: 6,
+    gap: 8,
     marginTop: 8,
   },
   buttonText: {
-    fontSize: 14,
+    fontSize: 15,
     fontWeight: '700',
     color: '#0f172a',
   },

@@ -6,19 +6,24 @@ import {
   TouchableOpacity,
   StyleSheet,
   ActivityIndicator,
-  Alert,
   Image,
 } from 'react-native';
 import { useAuth } from '../hooks/useAuth';
+import ConfirmModal from '../components/ConfirmModal';
 
 export default function Login({ navigation }) {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const { login, loading, error } = useAuth();
+  const [modal, setModal] = useState({ visible: false, title: '', message: '' });
+
+  const showInfo = (title, message) =>
+    setModal({ visible: true, title, message });
+  const hideModal = () => setModal((m) => ({ ...m, visible: false }));
 
   const handleLogin = async () => {
     if (!email || !password) {
-      Alert.alert('Hata', 'Lütfen tüm alanları doldurun');
+      showInfo('Hata', 'Lütfen tüm alanları doldurun.');
       return;
     }
 
@@ -29,7 +34,7 @@ export default function Login({ navigation }) {
         setPassword('');
       }
     } catch (err) {
-      Alert.alert('Giriş Hatası', error || 'Giriş yapılamadı');
+      showInfo('Giriş Hatası', error || 'Giriş yapılamadı.');
     }
   };
 
@@ -88,16 +93,20 @@ export default function Login({ navigation }) {
 
       {/* Footer */}
       <View style={styles.footer}>
-        <Text style={styles.footerText}>
-          Hesabınız yok mu?{' '}
-          <Text
-            style={styles.registerLink}
-            onPress={() => navigation && navigation.navigate('Register')}
-          >
-            Kayıt olun
-          </Text>
-        </Text>
+        <Text style={styles.footerText}>Pax Medya Mesai Takip</Text>
       </View>
+
+      <ConfirmModal
+        visible={modal.visible}
+        icon="info"
+        iconColor="#ef4444"
+        title={modal.title}
+        message={modal.message}
+        confirmText="Tamam"
+        hideCancel
+        onConfirm={hideModal}
+        onCancel={hideModal}
+      />
     </View>
   );
 }

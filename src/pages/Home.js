@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useCallback, useMemo } from 'react';
 import {
   View,
   Text,
@@ -6,1027 +6,575 @@ import {
   TouchableOpacity,
   ActivityIndicator,
   ScrollView,
-  Alert,
+  RefreshControl,
   Image,
 } from 'react-native';
-import { WebView } from 'react-native-webview';
 import { MaterialIcons } from '@expo/vector-icons';
 import { useAuth } from '../hooks/useAuth';
 import { useDatabase } from '../hooks/useDatabase';
+import { useEnvanter } from '../hooks/useEnvanter';
+import { useSelector } from 'react-redux';
 import CelebrationModal from '../components/CelebrationModal';
+import ConfirmModal from '../components/ConfirmModal';
+import QuickScanModal from '../components/QuickScanModal';
 import * as Location from 'expo-location';
+import { GEOFENCE_CONFIG } from '../config/appConfig';
+import notificationService from '../services/notificationService';
 
-// Geofence Ayarları
-const GEOFENCE_CENTER = {
-  latitude: 39.90022219885123,
-  longitude: 32.85887139306502,
-};
-const GEOFENCE_RADIUS = 100; // metre
-
-// Haversine Formülü ile Mesafe Hesapla
-const calculateDistance = (point1, point2) => {
-  const earthRadiusKm = 6371;
-  const degToRad = Math.PI / 180;
-
-  const dLat = (point2.latitude - point1.latitude) * degToRad;
-  const dLon = (point2.longitude - point1.longitude) * degToRad;
-
-  const lat1Rad = point1.latitude * degToRad;
-  const lat2Rad = point2.latitude * degToRad;
+const calcDistance = (p1, p2) => {
+  const R = 6371000;
+  const rad = Math.PI / 180;
+  const dLat = (p2.latitude - p1.latitude) * rad;
+  const dLon = (p2.longitude - p1.longitude) * rad;
   const a =
-    Math.sin(dLat / 2) * Math.sin(dLat / 2) +
-    Math.sin(dLon / 2) *
-      Math.sin(dLon / 2) *
-      Math.cos(lat1Rad) *
-      Math.cos(lat2Rad);
-
-  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
-
-  return earthRadiusKm * c * 1000; // metre cinsinden
+    Math.sin(dLat / 2) ** 2 +
+    Math.cos(p1.latitude * rad) * Math.cos(p2.latitude * rad) * Math.sin(dLon / 2) ** 2;
+  return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
 };
 
-const isWithinRadius = (userLocation, center, radiusInMeters) => {
-  const distance = calculateDistance(userLocation, center);
-  return distance <= radiusInMeters;
+const fmtSaat = (date) =>
+  date ? new Date(date).toLocaleTimeString('tr-TR', { hour: '2-digit', minute: '2-digit' }) : '--:--';
+
+const MODAL_DEF = {
+  visible: false, icon: null, iconColor: '#ffd800',
+  title: '', message: '', confirmText: 'Tamam',
+  cancelText: 'İptal', destructive: false, hideCancel: false, onConfirm: null,
 };
 
 export default function Home() {
   const { user } = useAuth();
-  const { userProfile, loading: dbLoading, getProfile, addRecord, updateRecord, records, getWorkRecords } = useDatabase();
-  const mapRef = React.useRef(null); // Harita ref'i
+  const userProfile = useSelector((st) => st.database.userProfile);
+  const { userProfile: dbProfile, loading: dbLoading, getProfile, addRecord, updateRecord, records, getWorkRecords } = useDatabase();
+  const { items, handleTeslimAl, handleTeslimEt } = useEnvanter();
 
   const [location, setLocation] = useState(null);
   const [isInZone, setIsInZone] = useState(false);
   const [locationLoading, setLocationLoading] = useState(true);
+  const [locationRefreshing, setLocationRefreshing] = useState(false);
   const [locationError, setLocationError] = useState(null);
-  const [isUserDragging, setIsUserDragging] = useState(false); // Kullanıcı haritayı kaydırıyor mu?
-  const [checkInStatus, setCheckInStatus] = useState('idle'); // idle, checked-in, checked-out
+  const [checkInStatus, setCheckInStatus] = useState('idle');
   const [checkInTime, setCheckInTime] = useState(null);
   const [checkOutTime, setCheckOutTime] = useState(null);
-  const [isProcessing, setIsProcessing] = useState(false);
-  const [recordId, setRecordId] = useState(null); // Dokument ID'sini sakla
+  const [isProcessing, setIsProcessing] = useState(null); // null | 'normal' | 'dis' | 'out'
+  const [recordId, setRecordId] = useState(null);
   const [hasShownAutoCheckoutAlert, setHasShownAutoCheckoutAlert] = useState(false);
   const [celebrationVisible, setCelebrationVisible] = useState(false);
   const [celebrationType, setCelebrationType] = useState('check-in');
+  const [refreshing, setRefreshing] = useState(false);
+  const [modal, setModal] = useState(MODAL_DEF);
+  const [quickScan, setQuickScan] = useState(false);
+  const [isDisMesai, setIsDisMesai] = useState(false);
 
-  // Profil bilgisini yükle
-  useEffect(() => {
-    if (user?.uid) {
-      getProfile(user.uid);
-      getWorkRecords(user.uid); // Bugünün kaydını getir
+  const hideModal = useCallback(() => setModal((m) => ({ ...m, visible: false })), []);
+  const showModal = useCallback((cfg) => setModal({ ...MODAL_DEF, visible: true, onConfirm: () => setModal((m) => ({ ...m, visible: false })), ...cfg }), []);
+  const showInfo = useCallback((title, message, icon = 'info', iconColor = '#ef4444') =>
+    showModal({ title, message, icon, iconColor, confirmText: 'Tamam', hideCancel: true }), [showModal]);
+
+  const displayName = useMemo(
+    () => userProfile?.displayName || dbProfile?.displayName || user?.email || '',
+    [userProfile, dbProfile, user]
+  );
+
+  const onRefresh = useCallback(async () => {
+    setRefreshing(true);
+    try {
+      if (user?.uid) await Promise.all([getProfile(user.uid), getWorkRecords(user.uid)]);
+    } finally {
+      setRefreshing(false);
     }
-  }, [user]);
+  }, [user, getProfile, getWorkRecords]);
 
-  // Bugünün kaydını kontrol et ve önceki günün eksik kaydını kontrol et
+  const handleRefreshLocation = useCallback(async () => {
+    setLocationRefreshing(true);
+    try {
+      const loc = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.High });
+      setLocation(loc.coords);
+      setIsInZone(calcDistance(loc.coords, GEOFENCE_CONFIG.center) <= GEOFENCE_CONFIG.radius);
+      setLocationError(null);
+    } catch (_) {}
+    finally { setLocationRefreshing(false); }
+  }, []);
+
   useEffect(() => {
     if (user?.uid && records && !hasShownAutoCheckoutAlert) {
-      const today = new Date().toISOString().split('T')[0]; // YYYY-MM-DD
-      
-      // Kullanıcının kendi kayıtlarını filtrele
-      const userRecords = records.filter(record => record.userId === user.uid);
-      
-      // Önceki günün eksik kaydını kontrol et (çıkış yapılmamış)
+      const today = new Date().toISOString().split('T')[0];
+      const userRecords = records.filter(r => r.userId === user.uid);
+
       const yesterday = new Date();
       yesterday.setDate(yesterday.getDate() - 1);
       const yesterdayStr = yesterday.toISOString().split('T')[0];
-      
-      const yesterdayRecord = userRecords.find(
-        record => record.date === yesterdayStr && !record.checkOutTime
-      );
-      
-      // Eğer önceki günün eksik kaydı varsa, otomatik olarak gece yarısında çıkış yap (18:30 olarak kaydet)
+      const yesterdayRecord = userRecords.find(r => r.date === yesterdayStr && !r.checkOutTime);
+
       if (yesterdayRecord) {
         setHasShownAutoCheckoutAlert(true);
-        
-        // Çıkış saati olarak 18:30'u kullan
-        const checkoutTime = new Date(yesterday);
-        checkoutTime.setHours(18, 30, 0, 0); // 18:30
-        
-        // Otomatik çıkış yap (alert göstermeden)
+        const co = new Date(yesterday);
+        co.setHours(18, 30, 0, 0);
         updateRecord(yesterdayRecord.id, {
-          checkOutTime: checkoutTime.toISOString(),
+          checkOutTime: co.toISOString(),
           checkOutLocation: yesterdayRecord.checkInLocation || null,
-          autoCheckOut: true, // Otomatik çıkış olduğunu belirt
-        })
-        .then(() => {
-          // Kayıtları yeniden yükle
-          getWorkRecords(user.uid);
-        })
-        .catch((error) => {
-          // Hata durumunda sessizce devam et
-          if (__DEV__) {
-            console.error('Otomatik çıkış hatası:', error);
-          }
-        });
+          autoCheckOut: true,
+        }).then(() => getWorkRecords(user.uid)).catch(() => {});
       }
-      
-      // Bugünün kaydını ara
-      const todayRecord = userRecords.find(record => record.date === today);
-      
+
+      const todayRecord = userRecords.find(r => r.date === today);
       if (todayRecord) {
-        // Bugün giriş yapılmış
         setCheckInTime(new Date(todayRecord.checkInTime));
-        
+        setIsDisMesai(!!todayRecord.disMesai);
         if (todayRecord.checkOutTime) {
-          // Çıkış da yapılmış
           setCheckOutTime(new Date(todayRecord.checkOutTime));
           setCheckInStatus('checked-out');
-          setRecordId(todayRecord.id);
         } else {
-          // Sadece giriş yapılmış
           setCheckInStatus('checked-in');
-          setRecordId(todayRecord.id);
         }
+        setRecordId(todayRecord.id);
       } else {
-        // Bugün henüz giriş yapılmamış
         setCheckInStatus('idle');
         setCheckInTime(null);
         setCheckOutTime(null);
         setRecordId(null);
+        setIsDisMesai(false);
       }
     }
   }, [records, user]);
 
-  // Konum İzni ve Takibi Başlat
   useEffect(() => {
-    let subscription = null;
-    let isMounted = true;
-
-    const startLocationTracking = async () => {
+    let sub = null;
+    let mounted = true;
+    (async () => {
       try {
         const { status } = await Location.requestForegroundPermissionsAsync();
-        if (!isMounted) return;
-        
-        if (status !== 'granted') {
+        if (!mounted || status !== 'granted') {
           setLocationError('Konum izni reddedildi');
           setLocationLoading(false);
           return;
         }
-
-        // Önce hızlıca mevcut konumu al (kullanıcı hemen görsün)
         try {
-          const currentLocation = await Location.getCurrentPositionAsync({
-            accuracy: Location.Accuracy.High,
-          });
-          
-          if (!isMounted) return;
-          
-          setLocation(currentLocation.coords);
-          const inZone = isWithinRadius(
-            {
-              latitude: currentLocation.coords.latitude,
-              longitude: currentLocation.coords.longitude,
-            },
-            GEOFENCE_CENTER,
-            GEOFENCE_RADIUS
-          );
-          setIsInZone(inZone);
+          const loc = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.High });
+          if (!mounted) return;
+          setLocation(loc.coords);
+          setIsInZone(calcDistance(loc.coords, GEOFENCE_CONFIG.center) <= GEOFENCE_CONFIG.radius);
           setLocationLoading(false);
-          setLocationError(null);
-        } catch (getLocationError) {
-          // İlk konum alınamazsa devam et, watchPositionAsync dener
-          if (__DEV__) {
-            console.error('İlk konum alınamadı:', getLocationError);
-          }
-        }
+        } catch (_) {}
 
-        // Sonra gerçek zamanlı konum takibini başlat
-        subscription = await Location.watchPositionAsync(
-          {
-            accuracy: Location.Accuracy.High,
-            timeInterval: 5000, // 5 saniyede bir güncelle
-            distanceInterval: 10, // 10 metre değişimde güncelle
-          },
+        sub = await Location.watchPositionAsync(
+          { accuracy: Location.Accuracy.High, timeInterval: 5000, distanceInterval: 10 },
           (loc) => {
-            if (!isMounted) return;
-            
-            try {
-              setLocation(loc.coords);
-              const inZone = isWithinRadius(
-                {
-                  latitude: loc.coords.latitude,
-                  longitude: loc.coords.longitude,
-                },
-                GEOFENCE_CENTER,
-                GEOFENCE_RADIUS
-              );
-              setIsInZone(inZone);
-              setLocationLoading(false);
-              setLocationError(null);
-            } catch (err) {
-              // Hata durumunda sessizce devam et
-              if (isMounted) {
-                setLocationLoading(false);
-              }
-            }
+            if (!mounted) return;
+            setLocation(loc.coords);
+            setIsInZone(calcDistance(loc.coords, GEOFENCE_CONFIG.center) <= GEOFENCE_CONFIG.radius);
+            setLocationLoading(false);
           }
         );
-      } catch (error) {
-        if (isMounted) {
-          setLocationError('Konum alınamadı. Lütfen uygulama ayarlarından konum iznini kontrol edin.');
-          setLocationLoading(false);
-        }
+      } catch (_) {
+        if (mounted) { setLocationError('Konum alınamadı'); setLocationLoading(false); }
       }
-    };
-
-    startLocationTracking();
-
-    // Cleanup function
-    return () => {
-      isMounted = false;
-      if (subscription) {
-        try {
-          subscription.remove();
-        } catch (err) {
-          // Sessizce devam et
-        }
-      }
-    };
+    })();
+    return () => { mounted = false; if (sub) try { sub.remove(); } catch (_) {} };
   }, []);
 
-  // Konum veya isInZone değiştiğinde haritayı güncelle (sadece marker, otomatik odaklama yok)
-  useEffect(() => {
-    if (location && mapRef.current) {
-      const fillColor = isInZone ? 'rgba(16, 185, 129, 0.3)' : 'rgba(239, 68, 68, 0.3)';
-      const strokeColor = isInZone ? '#10b981' : '#ef4444';
-      
-      const script = `
-        if (window.map) {
-          // Kullanıcı marker'ı güncelle
-          var userMarker = window.userMarker;
-          if (userMarker) {
-            userMarker.setLatLng([${location.latitude}, ${location.longitude}]);
-          } else {
-            var userIcon = L.icon({
-              iconUrl: 'data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMzIiIGhlaWdodD0iMzIiIHhtbG5zPSJodHRwOi8vd3d3LnczLm9yZy8yMDAwL3N2ZyI+PGNpcmNsZSBjeD0iMTYiIGN5PSIxNiIgcj0iMTYiIGZpbGw9IiMxMGI5ODEiLz48Y2lyY2xlIGN4PSIxNiIgY3k9IjE2IiByPSIxMiIgZmlsbD0id2hpdGUiLz48L3N2Zz4=',
-              iconSize: [32, 32],
-              iconAnchor: [16, 16]
-            });
-            window.userMarker = L.marker([${location.latitude}, ${location.longitude}], { icon: userIcon })
-              .addTo(window.map)
-              .bindPopup('Bulunduğunuz Yer');
+  const proceedWithCheckIn = useCallback(() => {
+    showModal({
+      icon: 'login', iconColor: '#10b981', title: 'Giriş Onayı',
+      message: `${new Date().toLocaleTimeString('tr-TR')} saatinde giriş yapılacak.`,
+      confirmText: 'Giriş Yap', cancelText: 'İptal',
+      onConfirm: async () => {
+        hideModal();
+        setIsProcessing('normal');
+        try {
+          const now = new Date();
+          const result = await addRecord(user.uid, {
+            userId: user.uid, displayName,
+            date: now.toISOString().split('T')[0],
+            checkInTime: now.toISOString(),
+            checkInLocation: { latitude: location.latitude, longitude: location.longitude },
+          });
+          if (result.payload?.id) setRecordId(result.payload.id);
+          setCheckInTime(now);
+          setCheckInStatus('checked-in');
+          setCelebrationType('check-in');
+          setCelebrationVisible(true);
+          notificationService.scheduleWorkReminders().catch(() => {});
+        } catch (err) {
+          showInfo('Hata', 'Giriş yapılamadı: ' + (err?.message || 'Bilinmeyen hata'));
+        } finally { setIsProcessing(null); }
+      },
+    });
+  }, [showModal, hideModal, addRecord, user, displayName, location, showInfo]);
+
+  const handleDisMesaiCheckIn = useCallback(() => {
+    if (!displayName) { showInfo('Hata', 'Profil bilgileri eksik.'); return; }
+    if (checkInStatus !== 'idle') { showInfo('Hata', 'Bugün zaten giriş yaptınız.'); return; }
+
+    showModal({
+      icon: 'work-outline', iconColor: '#8b5cf6', title: 'Saha Görevi Girişi',
+      message: `${new Date().toLocaleTimeString('tr-TR')} saatinde saha görevi girişi yapılacak.\n\nSaha görevi kaydı ofis dışı çalışma olarak işaretlenecektir.`,
+      confirmText: 'Saha Görevi Giriş Yap', cancelText: 'İptal',
+      onConfirm: async () => {
+        hideModal();
+        setIsProcessing('dis');
+        try {
+          const now = new Date();
+          const recordData = {
+            userId: user.uid, displayName,
+            date: now.toISOString().split('T')[0],
+            checkInTime: now.toISOString(),
+            disMesai: true,
+          };
+          if (location) {
+            recordData.checkInLocation = { latitude: location.latitude, longitude: location.longitude };
           }
-          
-          // Geofence circle'ı güncelle
-          if (window.geofenceCircle) {
-            window.geofenceCircle.setStyle({
-              color: '${strokeColor}',
-              fillColor: '${fillColor}'
-            });
-          }
-          
-          // Sadece kullanıcı haritayı kaydırmıyorsa otomatik odakla
-          if (!window.isUserDragging) {
-            window.map.setView([${location.latitude}, ${location.longitude}], 15);
-          }
-        }
-      `;
-      mapRef.current.injectJavaScript(script);
-    }
-  }, [location, isInZone]);
+          const result = await addRecord(user.uid, recordData);
+          if (result.payload?.id) setRecordId(result.payload.id);
+          setCheckInTime(now);
+          setCheckInStatus('checked-in');
+          setIsDisMesai(true);
+          setCelebrationType('check-in');
+          setCelebrationVisible(true);
+          notificationService.scheduleWorkReminders().catch(() => {});
+        } catch (err) {
+          showInfo('Hata', 'Giriş yapılamadı: ' + (err?.message || 'Bilinmeyen hata'));
+        } finally { setIsProcessing(null); }
+      },
+    });
+  }, [displayName, checkInStatus, showModal, hideModal, addRecord, user, location, showInfo]);
 
-  // Konumuma git - haritayı mevcut konuma odakla
-  const handleGoToMyLocation = () => {
-    if (location && mapRef.current) {
-      setIsUserDragging(false); // Otomatik takibi tekrar aktif et
-      const script = `
-        if (window.map && window.map.setView) {
-          window.isUserDragging = false;
-          window.map.setView([${location.latitude}, ${location.longitude}], 15);
-        }
-      `;
-      mapRef.current.injectJavaScript(script);
-    }
-  };
+  const handleCheckIn = useCallback(async () => {
+    if (!displayName) { showInfo('Hata', 'Profil bilgileri eksik.'); return; }
+    if (!isInZone) { showInfo('Hata', 'Alan dışındasınız. Giriş yapılamaz.'); return; }
+    if (checkInStatus !== 'idle') { showInfo('Hata', 'Bugün zaten giriş yaptınız.'); return; }
 
-  // Leaflet + OpenStreetMap HTML
-  const getMapHTML = () => {
-    if (!location) return '';
-    
-    const centerLat = location.latitude;
-    const centerLng = location.longitude;
-    const geofenceLat = GEOFENCE_CENTER.latitude;
-    const geofenceLng = GEOFENCE_CENTER.longitude;
-    const radius = GEOFENCE_RADIUS;
-    const fillColor = isInZone ? 'rgba(16, 185, 129, 0.3)' : 'rgba(239, 68, 68, 0.3)';
-    const strokeColor = isInZone ? '#10b981' : '#ef4444';
-
-    return `
-      <!DOCTYPE html>
-      <html>
-        <head>
-          <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
-          <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
-          <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
-          <style>
-            body { margin: 0; padding: 0; }
-            #map { width: 100%; height: 100vh; }
-          </style>
-        </head>
-        <body>
-          <div id="map"></div>
-          <script>
-            var map = L.map('map').setView([${centerLat}, ${centerLng}], 15);
-            window.map = map;
-            window.isUserDragging = false; // Kullanıcı haritayı kaydırıyor mu?
-            
-            // Kullanıcı haritayı kaydırdığında otomatik takibi durdur
-            map.on('dragstart', function() {
-              window.isUserDragging = true;
-            });
-            
-            // Kullanıcı haritayı bıraktığında (otomatik takip devam etmez, sadece marker güncellenir)
-            map.on('dragend', function() {
-              // dragend'de false yapmıyoruz, böylece kullanıcı haritayı kaydırdıktan sonra
-              // otomatik takip devam etmez. Sadece "Konumuma Git" butonuna basıldığında
-              // otomatik takip tekrar aktif olur.
-            });
-            
-            L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-              attribution: '© OpenStreetMap contributors',
-              maxZoom: 19
-            }).addTo(map);
-
-            // Geofence Circle
-            window.geofenceCircle = L.circle([${geofenceLat}, ${geofenceLng}], {
-              color: '${strokeColor}',
-              fillColor: '${fillColor}',
-              fillOpacity: 0.3,
-              radius: ${radius}
-            }).addTo(map);
-
-            // Merkez Marker
-            var centerIcon = L.icon({
-              iconUrl: 'data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iNDAiIGhlaWdodD0iNDAiIHhtbG5zPSJodHRwOi8vd3d3LnczLm9yZy8yMDAwL3N2ZyI+PGNpcmNsZSBjeD0iMjAiIGN5PSIyMCIgcj0iMjAiIGZpbGw9IiNmZmQ4MDAiLz48dGV4dCB4PSIyMCIgeT0iMjUiIGZvbnQtc2l6ZT0iMjAiIHRleHQtYW5jaG9yPSJtaWRkbGUiIGZpbGw9IiMwZjE3MmEiPk08L3RleHQ+PC9zdmc+',
-              iconSize: [40, 40],
-              iconAnchor: [20, 20]
-            });
-            L.marker([${geofenceLat}, ${geofenceLng}], { icon: centerIcon })
-              .addTo(map)
-              .bindPopup('Merkez Noktası');
-
-            // Kullanıcı Marker
-            var userIcon = L.icon({
-              iconUrl: 'data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMzIiIGhlaWdodD0iMzIiIHhtbG5zPSJodHRwOi8vd3d3LnczLm9yZy8yMDAwL3N2ZyI+PGNpcmNsZSBjeD0iMTYiIGN5PSIxNiIgcj0iMTYiIGZpbGw9IiMxMGI5ODEiLz48Y2lyY2xlIGN4PSIxNiIgY3k9IjE2IiByPSIxMiIgZmlsbD0id2hpdGUiLz48L3N2Zz4=',
-              iconSize: [32, 32],
-              iconAnchor: [16, 16]
-            });
-            window.userMarker = L.marker([${centerLat}, ${centerLng}], { icon: userIcon })
-              .addTo(map)
-              .bindPopup('Bulunduğunuz Yer');
-          </script>
-        </body>
-      </html>
-    `;
-  };
-
-  const handleCheckIn = async () => {
-    if (!user?.uid || !userProfile?.displayName) {
-      Alert.alert('Hata', 'Profil bilgileri eksik. Lütfen Profile gidin.');
-      return;
-    }
-
-    if (!isInZone) {
-      Alert.alert('Hata', 'Alan dışındasınız. Giriş yapılamaz.');
-      return;
-    }
-
-    // Bugün zaten giriş yaptı mı kontrol et
-    if (checkInStatus !== 'idle') {
-      Alert.alert('Hata', 'Bugün zaten giriş yaptınız. Lütfen çıkış yapın.');
-      return;
-    }
-
-    // Önceki günün eksik kaydını kontrol et
     if (records && user?.uid) {
       const yesterday = new Date();
       yesterday.setDate(yesterday.getDate() - 1);
       const yesterdayStr = yesterday.toISOString().split('T')[0];
-      
-      const userRecords = records.filter(record => record.userId === user.uid);
-      const yesterdayRecord = userRecords.find(
-        record => record.date === yesterdayStr && !record.checkOutTime
-      );
-      
+      const userRecords = records.filter(r => r.userId === user.uid);
+      const yesterdayRecord = userRecords.find(r => r.date === yesterdayStr && !r.checkOutTime);
+
       if (yesterdayRecord) {
-        Alert.alert(
-          'Eksik Kayıt Var',
-          `Dün (${yesterday.toLocaleDateString('tr-TR')}) giriş yaptınız ancak çıkış yapmadınız. Önce önceki günün kaydını tamamlamanız gerekiyor.`,
-          [
-            {
-              text: 'İptal',
-              style: 'cancel',
-            },
-            {
-              text: 'Otomatik Çıkış Yap',
-              onPress: async () => {
-                try {
-                  // Çıkış saati olarak 18:30'u kullan
-                  const checkoutTime = new Date(yesterday);
-                  checkoutTime.setHours(18, 30, 0, 0); // 18:30
-                  
-                  await updateRecord(yesterdayRecord.id, {
-                    checkOutTime: checkoutTime.toISOString(),
-                    checkOutLocation: yesterdayRecord.checkInLocation || null,
-                    autoCheckOut: true,
-                  });
-                  
-                  // Kayıtları yeniden yükle ve giriş işlemine devam et
-                  await getWorkRecords(user.uid);
-                  
-                  // Giriş işlemine devam et
-                  proceedWithCheckIn();
-                } catch (error) {
-                  if (__DEV__) {
-                    console.error('Otomatik çıkış hatası:', error);
-                  }
-                  // Production'da sessizce devam et
-                }
-              },
-            },
-          ]
-        );
+        showModal({
+          icon: 'warning', iconColor: '#f59e0b', title: 'Eksik Kayıt Var',
+          message: `Dün (${yesterday.toLocaleDateString('tr-TR')}) çıkış yapılmamış. Otomatik çıkış yapılsın mı?`,
+          confirmText: 'Otomatik Çıkış Yap', cancelText: 'İptal',
+          onConfirm: async () => {
+            hideModal();
+            const co = new Date(yesterday); co.setHours(18, 30, 0, 0);
+            await updateRecord(yesterdayRecord.id, { checkOutTime: co.toISOString(), autoCheckOut: true });
+            await getWorkRecords(user.uid);
+            proceedWithCheckIn();
+          },
+        });
         return;
       }
     }
-
-    // Giriş işlemini gerçekleştir
     proceedWithCheckIn();
-  };
+  }, [displayName, isInZone, checkInStatus, records, user, showInfo, showModal, hideModal, updateRecord, getWorkRecords, proceedWithCheckIn]);
 
-  const proceedWithCheckIn = async () => {
-    // Onay dialog'u
-    Alert.alert(
-      'Giriş Yapmak İstiyor musunuz?',
-      `${new Date().toLocaleTimeString('tr-TR')} saatinde giriş yapılacaktır.`,
-      [
-        {
-          text: 'İptal',
-          onPress: () => {
-            if (__DEV__) console.log('Giriş iptal edildi');
-          },
-          style: 'cancel',
-        },
-        {
-          text: 'Evet, Giriş Yap',
-          onPress: async () => {
-            setIsProcessing(true);
-            try {
-              const now = new Date();
-              const dateStr = now.toISOString().split('T')[0]; // YYYY-MM-DD
+  const handleCheckOut = useCallback(async () => {
+    if (!checkInTime || !recordId) { showInfo('Hata', 'Giriş kaydı bulunamadı.'); return; }
+    if (checkOutTime) { showInfo('Hata', 'Bugün zaten çıkış yaptınız.'); return; }
+    if (!isDisMesai && !isInZone) { showInfo('Uyarı', 'Çıkış için alan içinde olmalısınız.', 'warning', '#f59e0b'); return; }
 
-              const recordData = {
-                userId: user.uid,
-                displayName: userProfile.displayName,
-                date: dateStr,
-                checkInTime: now.toISOString(),
-                checkInLocation: {
-                  latitude: location.latitude,
-                  longitude: location.longitude,
-                },
-              };
+    const title = isDisMesai ? 'Saha Görevi Çıkışı' : 'Çıkış Onayı';
+    showModal({
+      icon: 'logout', iconColor: '#ef4444', title,
+      message: `${new Date().toLocaleTimeString('tr-TR')} saatinde ${isDisMesai ? 'saha görevi ' : ''}çıkış yapılacak.`,
+      confirmText: 'Çıkış Yap', cancelText: 'İptal', destructive: true,
+      onConfirm: async () => {
+        hideModal();
+        setIsProcessing('out');
+        try {
+          const now = new Date();
+          const updateData = { checkOutTime: now.toISOString() };
+          if (location) {
+            updateData.checkOutLocation = { latitude: location.latitude, longitude: location.longitude };
+          }
+          await updateRecord(recordId, updateData);
+          setCheckOutTime(now);
+          setCheckInStatus('checked-out');
+          setCelebrationType('check-out');
+          setCelebrationVisible(true);
+          notificationService.cancelWorkReminders().catch(() => {});
+        } catch (err) {
+          showInfo('Hata', 'Çıkış yapılamadı: ' + (err?.message || 'Bilinmeyen hata'));
+        } finally { setIsProcessing(null); }
+      },
+    });
+  }, [checkInTime, recordId, checkOutTime, isInZone, isDisMesai, showModal, hideModal, updateRecord, location, showInfo]);
 
-              const result = await addRecord(user.uid, recordData);
-              
-              // Dokument ID'sini result.payload.id'den al
-              const newRecordId = result.payload?.id;
-              if (newRecordId) {
-                setRecordId(newRecordId);
-              }
+  const onQuickTeslimAl = useCallback(async (item) => {
+    const name = userProfile?.displayName || user?.email || 'Bilinmiyor';
+    return await handleTeslimAl(item._docId, user.uid, name, item.ad, item.tur);
+  }, [userProfile, user, handleTeslimAl]);
 
-              setCheckInTime(now);
-              setCheckInStatus('checked-in');
-              setCelebrationType('check-in');
-              setCelebrationVisible(true);
-            } catch (error) {
-              if (__DEV__) {
-                console.error('Giriş hatası:', error);
-              }
-              Alert.alert('Hata', 'Giriş yapılamadı: ' + (error?.message || 'Bilinmeyen hata'));
-            } finally {
-              setIsProcessing(false);
-            }
-          },
-          style: 'default',
-        },
-      ]
-    );
-  };
-
-  const handleCheckOut = async () => {
-    if (!checkInTime) {
-      Alert.alert('Hata', 'Giriş kaydı bulunamadı');
-      return;
-    }
-
-    if (!recordId) {
-      Alert.alert('Hata', 'Kayıt ID bulunamadı');
-      return;
-    }
-
-    // Zaten çıkış yapılmış mı kontrol et
-    if (checkOutTime) {
-      Alert.alert('Hata', 'Bugün zaten çıkış yaptınız. İşlem tamamlandı.');
-      return;
-    }
-
-    // Alan içinde olma kontrolü - Çıkış yapmak için alan içinde olmalı
-    if (!isInZone) {
-      Alert.alert(
-        'Uyarı',
-        'Çıkış yapmak için alan içinde olmalısınız. Lütfen belirlenen alana girin.'
-      );
-      return;
-    }
-
-    // Onay dialog'u
-    Alert.alert(
-      'Çıkış Yapmak İstiyor musunuz?',
-      `${new Date().toLocaleTimeString('tr-TR')} saatinde çıkış yapılacaktır.`,
-      [
-        {
-          text: 'İptal',
-          onPress: () => {
-            if (__DEV__) console.log('Çıkış iptal edildi');
-          },
-          style: 'cancel',
-        },
-        {
-          text: 'Evet, Çıkış Yap',
-          onPress: async () => {
-            setIsProcessing(true);
-            try {
-              const now = new Date();
-              
-              // Firebase'e çıkış zamanını güncelle
-              await updateRecord(recordId, {
-                checkOutTime: now.toISOString(),
-                checkOutLocation: {
-                  latitude: location.latitude,
-                  longitude: location.longitude,
-                },
-              });
-
-              setCheckOutTime(now);
-              setCheckInStatus('checked-out');
-              setCelebrationType('check-out');
-              setCelebrationVisible(true);
-            } catch (error) {
-              if (__DEV__) {
-                console.error('Çıkış hatası:', error);
-              }
-              Alert.alert('Hata', 'Çıkış yapılamadı: ' + (error?.message || 'Bilinmeyen hata'));
-            } finally {
-              setIsProcessing(false);
-            }
-          },
-          style: 'destructive',
-        },
-      ]
-    );
-  };
+  const onQuickTeslimEt = useCallback(async (item) => {
+    return await handleTeslimEt(item._docId, item.aktifHareketId);
+  }, [handleTeslimEt]);
 
   if (locationLoading) {
     return (
-      <View style={styles.centerContainer}>
+      <View style={s.centerWrap}>
         <ActivityIndicator size="large" color="#ffd800" />
-        <Text style={styles.loadingText}>Konum Alınıyor...</Text>
+        <Text style={s.centerTxt}>Konum alınıyor...</Text>
       </View>
     );
   }
 
   if (locationError) {
     return (
-      <View style={styles.centerContainer}>
+      <View style={s.centerWrap}>
         <MaterialIcons name="location-off" size={48} color="#ef4444" />
-        <Text style={styles.errorTitle}>Konum Hatası</Text>
-        <Text style={styles.errorMessage}>{locationError}</Text>
-        <TouchableOpacity
-          style={styles.retryButton}
-          onPress={startLocationTracking}
-        >
-          <Text style={styles.retryButtonText}>Tekrar Dene</Text>
-        </TouchableOpacity>
+        <Text style={s.errTitle}>Konum Hatası</Text>
+        <Text style={s.errMsg}>{locationError}</Text>
       </View>
     );
   }
 
+  const isCheckedIn  = checkInStatus === 'checked-in';
+  const isCheckedOut = checkInStatus === 'checked-out';
+  const isIdle       = checkInStatus === 'idle';
+
   return (
-    <ScrollView style={styles.container}>
-      {/* Header */}
-      <View style={styles.header}>
-        <Image
-          source={require('../../assets/paxLogoHv4.png')}
-          style={styles.logo}
-          resizeMode="contain"
-        />
-
+    <ScrollView
+      style={s.root}
+      contentContainerStyle={{ paddingBottom: 32 }}
+      refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#ffd800" />}
+    >
+      <View style={s.header}>
+        <Image source={require('../../assets/paxLogoHv4.png')} style={s.logo} resizeMode="contain" />
+        <TouchableOpacity style={s.taratBtn} onPress={() => setQuickScan(true)} activeOpacity={0.8}>
+          <MaterialIcons name="qr-code-scanner" size={18} color="#0f172a" />
+          <Text style={s.taratBtnTxt}>Tarat</Text>
+        </TouchableOpacity>
       </View>
 
-      {/* Harita - OpenStreetMap with Leaflet */}
-      {location && (
-        <View style={styles.mapContainer}>
-          <WebView
-            ref={mapRef}
-            source={{ html: getMapHTML() }}
-            style={{ flex: 1 }}
-            javaScriptEnabled={true}
-            domStorageEnabled={true}
-            startInLoadingState={true}
-            scalesPageToFit={true}
-          />
-          {/* Konumuma Git Butonu */}
-          <TouchableOpacity
-            style={styles.goToLocationButton}
-            onPress={handleGoToMyLocation}
-          >
-            <MaterialIcons name="my-location" size={24} color="#0f172a" />
-          </TouchableOpacity>
+      <View style={[s.konumKart, isInZone ? s.konumKartIcinde : s.konumKartDisinda]}>
+        <View style={s.konumSol}>
+          <View style={[s.konumIkonWrap, { backgroundColor: isInZone ? '#10b98122' : '#ef444422' }]}>
+            <MaterialIcons name={isInZone ? 'location-on' : 'location-off'} size={20} color={isInZone ? '#10b981' : '#ef4444'} />
+          </View>
+          <View>
+            <Text style={[s.konumDurum, { color: isInZone ? '#10b981' : '#ef4444' }]}>
+              {isInZone ? 'Alan İçindesiniz' : 'Alan Dışındasınız'}
+            </Text>
+            <Text style={s.konumAlt}>
+              {isInZone ? 'Giriş/çıkış işlemi yapabilirsiniz' : 'Ofis alanına geliniz'}
+            </Text>
+          </View>
         </View>
-      )}
-
-      {/* Kullanıcı Kartı */}
-      <View style={styles.userCard}>
-        <MaterialIcons name="account-circle" size={50} color="#ffd800" />
-        <View style={styles.userInfo}>
-          <Text style={styles.userName}>{userProfile?.displayName || 'Yükleniyor...'}</Text>
-          <Text style={styles.userEmail}>{user?.email}</Text>
-        </View>
+        <TouchableOpacity style={s.konumYenileBtn} onPress={handleRefreshLocation} disabled={locationRefreshing}>
+          {locationRefreshing
+            ? <ActivityIndicator size="small" color="#ffd800" />
+            : <MaterialIcons name="my-location" size={20} color="#ffd800" />}
+        </TouchableOpacity>
       </View>
 
-      {/* Konum Durumu */}
-      <View style={styles.statusCard}>
-        <View style={styles.statusHeader}>
-          <MaterialIcons
-            name="location-on"
-            size={20}
-            color={isInZone ? '#10b981' : '#ef4444'}
-          />
-          <Text
-            style={[
-              styles.statusText,
-              { color: isInZone ? '#10b981' : '#ef4444' },
-            ]}
-          >
-            {isInZone ? 'Alan İçinde' : 'Alan Dışında'}
-          </Text>
-        </View>
-        {location && (
-          <Text style={styles.coordinatesText}>
-            {location.latitude.toFixed(4)}, {location.longitude.toFixed(4)}
-          </Text>
-        )}
-      </View>
-
-      {/* Giriş/Çıkış Zamanları */}
-      {(checkInStatus === 'checked-in' || checkInStatus === 'checked-out') && (
-        <>
-          {checkInTime && (
-            <View style={styles.timeCard}>
-              <MaterialIcons name="login" size={20} color="#10b981" />
-              <View style={styles.timeInfo}>
-                <Text style={styles.timeLabel}>Giriş Saati</Text>
-                <Text style={styles.timeValue}>
-                  {checkInTime.toLocaleTimeString('tr-TR')}
-                </Text>
-              </View>
+      <View style={s.mesaiKart}>
+        <View style={s.mesaiBaslikRow}>
+          <Text style={s.mesaiBaslik}>Bugünkü Mesai</Text>
+          {isDisMesai && (
+            <View style={s.disMesaiBadge}>
+              <MaterialIcons name="work-outline" size={11} color="#8b5cf6" />
+              <Text style={s.disMesaiBadgeTxt}>Saha Görevi</Text>
             </View>
           )}
-
-          {checkOutTime && (
-            <View style={styles.timeCard}>
-              <MaterialIcons name="logout" size={20} color="#ef4444" />
-              <View style={styles.timeInfo}>
-                <Text style={styles.timeLabel}>Çıkış Saati</Text>
-                <Text style={styles.timeValue}>
-                  {checkOutTime.toLocaleTimeString('tr-TR')}
-                </Text>
-              </View>
-            </View>
-          )}
-        </>
-      )}
-
-      {/* Aksiyon Butonu */}
-      <View style={styles.actionContainer}>
-        {!isInZone && checkInStatus === 'idle' && (
-          <Text style={styles.disabledMessage}>
-            Giriş yapmak için alan içinde olmalısınız
-          </Text>
-        )}
-
-        {isInZone && checkInStatus === 'idle' && (
-          <TouchableOpacity
-            style={[styles.actionButton, styles.checkInButton]}
-            onPress={handleCheckIn}
-            disabled={isProcessing}
-          >
-            {isProcessing ? (
-              <ActivityIndicator color="#fff" />
-            ) : (
-              <>
-                <MaterialIcons name="login" size={20} color="#fff" />
-                <Text style={styles.actionButtonText}>Giriş Yap</Text>
-              </>
-            )}
-          </TouchableOpacity>
-        )}
-
-        {checkInStatus === 'checked-in' && (
-          <>
-            {!isInZone && (
-              <Text style={styles.disabledMessage}>
-                Çıkış yapmak için alan içinde olmalısınız
-              </Text>
-            )}
-            <TouchableOpacity
-              style={[
-                styles.actionButton,
-                styles.checkOutButton,
-                !isInZone && styles.actionButtonDisabled,
-              ]}
-              onPress={handleCheckOut}
-              disabled={isProcessing || !isInZone}
-            >
-              {isProcessing ? (
-                <ActivityIndicator color="#fff" />
-              ) : (
-                <>
-                  <MaterialIcons name="logout" size={20} color="#fff" />
-                  <Text style={styles.actionButtonText}>Çıkış Yap</Text>
-                </>
-              )}
-            </TouchableOpacity>
-          </>
-        )}
-
-        {checkInStatus === 'checked-out' && (
-          <View style={styles.completedMessage}>
-            <MaterialIcons name="check-circle" size={24} color="#ffd800" />
-            <Text style={styles.completedText}>Bugünkü mesai tamamlandı</Text>
+        </View>
+        <View style={s.zamanRow}>
+          <View style={[s.zamanKutu, s.zamanKutuGiris]}>
+            <View style={s.zamanIkon}><MaterialIcons name="login" size={16} color="#10b981" /></View>
+            <Text style={s.zamanEtiket}>Giriş</Text>
+            <Text style={[s.zamanSaat, { color: checkInTime ? '#10b981' : '#334155' }]}>{fmtSaat(checkInTime)}</Text>
+          </View>
+          <MaterialIcons name="arrow-forward" size={18} color="#334155" />
+          <View style={[s.zamanKutu, s.zamanKutuCikis]}>
+            <View style={s.zamanIkon}><MaterialIcons name="logout" size={16} color="#ef4444" /></View>
+            <Text style={s.zamanEtiket}>Çıkış</Text>
+            <Text style={[s.zamanSaat, { color: checkOutTime ? '#ef4444' : '#334155' }]}>{fmtSaat(checkOutTime)}</Text>
+          </View>
+        </View>
+        {isCheckedOut && (
+          <View style={s.tamamRow}>
+            <MaterialIcons name="check-circle" size={16} color="#ffd800" />
+            <Text style={s.tamamTxt}>Bugünkü mesai tamamlandı</Text>
           </View>
         )}
       </View>
 
-      {/* Celebration Modal */}
+      <View style={s.aksiyonWrap}>
+        {isIdle && !isInZone && (
+          <View style={s.uyariKutu}>
+            <MaterialIcons name="info-outline" size={16} color="#94a3b8" />
+            <Text style={s.uyariTxt}>Giriş için ofis alanına geliniz</Text>
+          </View>
+        )}
+        {isIdle && isInZone && (
+          <TouchableOpacity style={s.girisBtn} onPress={handleCheckIn} disabled={!!isProcessing} activeOpacity={0.85}>
+            {isProcessing === 'normal'
+              ? <ActivityIndicator color="#fff" />
+              : <><MaterialIcons name="login" size={22} color="#fff" /><Text style={s.aksiyonBtnTxt}>Giriş Yap</Text></>}
+          </TouchableOpacity>
+        )}
+
+        {isIdle && (
+          <TouchableOpacity style={s.disMesaiBtn} onPress={handleDisMesaiCheckIn} disabled={!!isProcessing} activeOpacity={0.85}>
+            {isProcessing === 'dis'
+              ? <ActivityIndicator color="#8b5cf6" />
+              : <>
+                  <View style={s.disMesaiIkonWrap}>
+                    <MaterialIcons name="work-outline" size={18} color="#8b5cf6" />
+                  </View>
+                  <View style={s.disMesaiBtnMetin}>
+                    <Text style={s.disMesaiBtnTxt}>Saha Görevi Giriş Yap</Text>
+                    <Text style={s.disMesaiBtnAlt}>Ofis dışı çalışma için alan kontrolü gerekmez</Text>
+                  </View>
+                  <MaterialIcons name="chevron-right" size={20} color="#8b5cf6" />
+                </>}
+          </TouchableOpacity>
+        )}
+
+        {isCheckedIn && (
+          <>
+            {!isDisMesai && !isInZone && (
+              <View style={s.uyariKutu}>
+                <MaterialIcons name="info-outline" size={16} color="#94a3b8" />
+                <Text style={s.uyariTxt}>Çıkış için ofis alanına geliniz</Text>
+              </View>
+            )}
+            <TouchableOpacity
+              style={[s.cikisBtn, !isDisMesai && !isInZone && s.btnDisabled]}
+              onPress={handleCheckOut}
+              disabled={!!isProcessing || (!isDisMesai && !isInZone)}
+              activeOpacity={0.85}
+            >
+              {isProcessing === 'out'
+                ? <ActivityIndicator color="#fff" />
+                : <><MaterialIcons name="logout" size={22} color="#fff" /><Text style={s.aksiyonBtnTxt}>{isDisMesai ? 'Saha Görevi Çıkış Yap' : 'Çıkış Yap'}</Text></>}
+            </TouchableOpacity>
+          </>
+        )}
+      </View>
+
       <CelebrationModal
         visible={celebrationVisible}
         type={celebrationType}
-        userName={userProfile?.displayName || ''}
+        userName={displayName}
+        userId={user?.uid}
         onClose={() => setCelebrationVisible(false)}
+      />
+      <ConfirmModal
+        visible={modal.visible} icon={modal.icon} iconColor={modal.iconColor}
+        title={modal.title} message={modal.message} confirmText={modal.confirmText}
+        cancelText={modal.cancelText} destructive={modal.destructive}
+        hideCancel={modal.hideCancel} onConfirm={modal.onConfirm} onCancel={hideModal}
+      />
+      <QuickScanModal
+        visible={quickScan}
+        items={items}
+        currentUser={user}
+        userProfile={userProfile}
+        processingId={null}
+        onTeslimAl={onQuickTeslimAl}
+        onTeslimEt={onQuickTeslimEt}
+        onClose={() => setQuickScan(false)}
       />
     </ScrollView>
   );
 }
 
-const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: '#0f172a',
-  },
-  centerContainer: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    backgroundColor: '#0f172a',
-  },
-  mapContainer: {
-    height: 300,
-    marginHorizontal: 16,
-    marginTop: 12,
-    marginBottom: 16,
-    borderRadius: 12,
-    overflow: 'hidden',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 3,
-    position: 'relative',
-  },
-  goToLocationButton: {
-    position: 'absolute',
-    bottom: 16,
-    right: 16,
-    backgroundColor: '#ffd800',
-    width: 48,
-    height: 48,
-    borderRadius: 24,
-    justifyContent: 'center',
-    alignItems: 'center',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.3,
-    shadowRadius: 4,
-    elevation: 5,
-  },
+const s = StyleSheet.create({
+  root: { flex: 1, backgroundColor: '#0f172a' },
+  centerWrap: { flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#0f172a', gap: 12 },
+  centerTxt: { fontSize: 14, color: '#64748b' },
+  errTitle: { fontSize: 18, fontWeight: '700', color: '#ef4444', marginTop: 8 },
+  errMsg: { fontSize: 13, color: '#64748b', textAlign: 'center', paddingHorizontal: 32, marginTop: 4 },
   header: {
-    backgroundColor: '#1e293b',
-    paddingHorizontal: 20,
-    paddingTop: 16,
-    paddingBottom: 20,
-    alignItems: 'center',
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
+    backgroundColor: '#1e293b', paddingHorizontal: 16, paddingTop: 14, paddingBottom: 14,
+    borderBottomWidth: 1, borderBottomColor: '#334155',
   },
-  logo: {
-    width: 200,
-    height: 80,
-    marginBottom: 12,
+  logo: { width: 140, height: 52 },
+  taratBtn: {
+    flexDirection: 'row', alignItems: 'center', gap: 6,
+    backgroundColor: '#ffd800', borderRadius: 10, paddingVertical: 8, paddingHorizontal: 14,
   },
-  headerTitle: {
-    fontSize: 28,
-    fontWeight: 'bold',
-    color: '#ffd800',
-    textAlign: 'center',
+  taratBtnTxt: { fontSize: 13, fontWeight: '800', color: '#0f172a' },
+  konumKart: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
+    marginHorizontal: 14, marginTop: 10, borderRadius: 14, padding: 14, borderWidth: 1,
   },
-  headerSubtitle: {
-    fontSize: 14,
-    color: '#cbd5e1',
-    marginTop: 4,
-    textAlign: 'center',
+  konumKartIcinde: { backgroundColor: '#052e1622', borderColor: '#10b98133' },
+  konumKartDisinda: { backgroundColor: '#7f1d1d22', borderColor: '#ef444433' },
+  konumSol: { flexDirection: 'row', alignItems: 'center', gap: 12, flex: 1 },
+  konumIkonWrap: { width: 40, height: 40, borderRadius: 12, alignItems: 'center', justifyContent: 'center' },
+  konumDurum: { fontSize: 14, fontWeight: '700' },
+  konumAlt: { fontSize: 11, color: '#64748b', marginTop: 2 },
+  konumYenileBtn: {
+    width: 38, height: 38, borderRadius: 19,
+    backgroundColor: '#0f172a', alignItems: 'center', justifyContent: 'center',
+    borderWidth: 1, borderColor: '#334155',
   },
-  userCard: {
-    flexDirection: 'row',
-    backgroundColor: '#1e293b',
-    marginHorizontal: 16,
-    marginBottom: 12,
-    padding: 16,
-    borderRadius: 12,
-    alignItems: 'center',
-    gap: 12,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.3,
-    shadowRadius: 4,
-    elevation: 3,
+  mesaiKart: {
+    backgroundColor: '#1e293b', marginHorizontal: 14, marginTop: 10,
+    borderRadius: 16, padding: 16, gap: 14, borderWidth: 1, borderColor: '#334155',
   },
-  userInfo: {
-    flex: 1,
+  mesaiBaslik: { fontSize: 11, fontWeight: '700', color: '#475569', textTransform: 'uppercase', letterSpacing: 0.5 },
+  zamanRow: { flexDirection: 'row', alignItems: 'center', gap: 10 },
+  zamanKutu: {
+    flex: 1, alignItems: 'center', borderRadius: 12, paddingVertical: 12, gap: 5, borderWidth: 1,
   },
-  userName: {
-    fontSize: 16,
-    fontWeight: 'bold',
-    color: '#f8fafc',
+  zamanKutuGiris: { backgroundColor: '#10b98110', borderColor: '#10b98130' },
+  zamanKutuCikis: { backgroundColor: '#ef444410', borderColor: '#ef444430' },
+  zamanIkon: {
+    width: 30, height: 30, borderRadius: 10,
+    backgroundColor: '#0f172a', alignItems: 'center', justifyContent: 'center',
   },
-  userEmail: {
-    fontSize: 12,
-    color: '#94a3b8',
-    marginTop: 4,
+  zamanEtiket: { fontSize: 10, color: '#64748b', fontWeight: '700', textTransform: 'uppercase' },
+  zamanSaat: { fontSize: 20, fontWeight: '800' },
+  tamamRow: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
+    gap: 7, backgroundColor: '#ffd80012', borderRadius: 8,
+    paddingVertical: 8, borderWidth: 1, borderColor: '#ffd80030',
   },
-  statusCard: {
-    backgroundColor: '#1e293b',
-    marginHorizontal: 16,
-    marginBottom: 12,
-    padding: 16,
-    borderRadius: 12,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.3,
-    shadowRadius: 4,
-    elevation: 3,
+  tamamTxt: { fontSize: 13, color: '#ffd800', fontWeight: '600' },
+  aksiyonWrap: { marginHorizontal: 14, marginTop: 10, gap: 10 },
+  uyariKutu: {
+    flexDirection: 'row', alignItems: 'center', gap: 8,
+    backgroundColor: '#1e293b', borderRadius: 12,
+    paddingVertical: 13, paddingHorizontal: 16, borderWidth: 1, borderColor: '#334155',
   },
-  statusHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
+  uyariTxt: { fontSize: 13, color: '#64748b' },
+  girisBtn: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
+    backgroundColor: '#10b981', borderRadius: 14, paddingVertical: 16, gap: 10,
+    shadowColor: '#10b981', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.3, shadowRadius: 10, elevation: 6,
   },
-  statusText: {
-    fontSize: 16,
-    fontWeight: '600',
+  cikisBtn: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
+    backgroundColor: '#ef4444', borderRadius: 14, paddingVertical: 16, gap: 10,
+    shadowColor: '#ef4444', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.3, shadowRadius: 10, elevation: 6,
   },
-  coordinatesText: {
-    fontSize: 12,
-    color: '#94a3b8',
-    marginTop: 8,
+  btnDisabled: { opacity: 0.45 },
+  aksiyonBtnTxt: { fontSize: 16, fontWeight: '800', color: '#fff' },
+  mesaiBaslikRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+  disMesaiBadge: {
+    flexDirection: 'row', alignItems: 'center', gap: 4,
+    backgroundColor: '#8b5cf615', borderRadius: 8,
+    paddingHorizontal: 8, paddingVertical: 3,
+    borderWidth: 1, borderColor: '#8b5cf633',
   },
-  timeCard: {
-    flexDirection: 'row',
-    backgroundColor: '#1e293b',
-    marginHorizontal: 16,
-    marginBottom: 12,
-    padding: 16,
-    borderRadius: 12,
-    alignItems: 'center',
-    gap: 12,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.3,
-    shadowRadius: 4,
-    elevation: 3,
-  },
-  timeInfo: {
-    flex: 1,
-  },
-  timeLabel: {
-    fontSize: 12,
-    color: '#94a3b8',
-  },
-  timeValue: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: '#f8fafc',
-    marginTop: 4,
-  },
-  actionContainer: {
-    marginHorizontal: 16,
-    marginVertical: 24,
-  },
-  actionButton: {
-    flexDirection: 'row',
-    paddingVertical: 16,
-    paddingHorizontal: 24,
-    borderRadius: 12,
-    alignItems: 'center',
+  disMesaiBadgeTxt: { fontSize: 10, fontWeight: '700', color: '#8b5cf6' },
+  disMesaiBtn: {
+    flexDirection: 'row', alignItems: 'center', gap: 12,
     justifyContent: 'center',
-    gap: 8,
+    backgroundColor: '#1e293b', borderRadius: 14,
+    paddingVertical: 14, paddingHorizontal: 16,
+    borderWidth: 1.5, borderColor: '#8b5cf633',
   },
-  checkInButton: {
-    backgroundColor: '#10b981',
+  disMesaiIkonWrap: {
+    width: 40, height: 40, borderRadius: 12,
+    backgroundColor: '#8b5cf615', alignItems: 'center', justifyContent: 'center',
+    borderWidth: 1, borderColor: '#8b5cf633',
   },
-  checkOutButton: {
-    backgroundColor: '#ef4444',
-  },
-  actionButtonText: {
-    color: '#fff',
-    fontSize: 16,
-    fontWeight: '600',
-  },
-  actionButtonDisabled: {
-    opacity: 0.5,
-  },
-  disabledMessage: {
-    backgroundColor: '#1e293b',
-    color: '#94a3b8',
-    textAlign: 'center',
-    paddingVertical: 16,
-    borderRadius: 12,
-    fontSize: 14,
-    borderWidth: 1,
-    borderColor: '#334155',
-  },
-  completedMessage: {
-    backgroundColor: '#1e293b',
-    paddingVertical: 16,
-    paddingHorizontal: 12,
-    borderRadius: 12,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 8,
-    borderWidth: 1,
-    borderColor: '#ffd800',
-  },
-  completedText: {
-    color: '#ffd800',
-    fontSize: 16,
-    fontWeight: '600',
-  },
-  loadingText: {
-    marginTop: 12,
-    fontSize: 14,
-    color: '#cbd5e1',
-  },
-  errorTitle: {
-    fontSize: 20,
-    fontWeight: 'bold',
-    color: '#ef4444',
-    marginTop: 12,
-  },
-  errorMessage: {
-    fontSize: 14,
-    color: '#94a3b8',
-    marginTop: 8,
-    textAlign: 'center',
-  },
-  retryButton: {
-    backgroundColor: '#ef4444',
-    paddingVertical: 12,
-    paddingHorizontal: 24,
-    borderRadius: 12,
-    marginTop: 16,
-  },
-  retryButtonText: {
-    color: '#fff',
-    fontSize: 14,
-    fontWeight: '600',
-  },
-  markerContainer: {
-    width: 40,
-    height: 40,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  markerImage: {
-    width: 40,
-    height: 40,
-  },
-  userMarkerContainer: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
-    backgroundColor: '#10b981',
-    alignItems: 'center',
-    justifyContent: 'center',
-    borderWidth: 2,
-    borderColor: '#fff',
-  },
+  disMesaiBtnMetin: { flex: 1, gap: 2 },
+  disMesaiBtnTxt: { fontSize: 14, fontWeight: '700', color: '#8b5cf6' },
+  disMesaiBtnAlt: { fontSize: 11, color: '#64748b' },
 });
