@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useCallback, useMemo } from 'react';
+import React, { useEffect, useState, useCallback, useMemo, useRef } from 'react';
 import {
   View,
   Text,
@@ -8,6 +8,7 @@ import {
   ScrollView,
   RefreshControl,
   Image,
+  InteractionManager,
 } from 'react-native';
 import { MaterialIcons } from '@expo/vector-icons';
 import { useAuth } from '../hooks/useAuth';
@@ -17,20 +18,12 @@ import { useSelector } from 'react-redux';
 import CelebrationModal from '../components/CelebrationModal';
 import ConfirmModal from '../components/ConfirmModal';
 import QuickScanModal from '../components/QuickScanModal';
-import * as Location from 'expo-location';
-import { GEOFENCE_CONFIG } from '../config/appConfig';
+import CardButton from '../components/CardButton';
+import { useLocation } from '../hooks/useLocation';
 import notificationService from '../services/notificationService';
+import { useTakvim } from '../hooks/useTakvim';
+import { toDateStr, getWeekStart, gorevHaftaStr } from './Takvim';
 
-const calcDistance = (p1, p2) => {
-  const R = 6371000;
-  const rad = Math.PI / 180;
-  const dLat = (p2.latitude - p1.latitude) * rad;
-  const dLon = (p2.longitude - p1.longitude) * rad;
-  const a =
-    Math.sin(dLat / 2) ** 2 +
-    Math.cos(p1.latitude * rad) * Math.cos(p2.latitude * rad) * Math.sin(dLon / 2) ** 2;
-  return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
-};
 
 const fmtSaat = (date) =>
   date ? new Date(date).toLocaleTimeString('tr-TR', { hour: '2-digit', minute: '2-digit' }) : '--:--';
@@ -38,20 +31,24 @@ const fmtSaat = (date) =>
 const MODAL_DEF = {
   visible: false, icon: null, iconColor: '#ffd800',
   title: '', message: '', confirmText: 'Tamam',
-  cancelText: 'İptal', destructive: false, hideCancel: false, onConfirm: null,
+  cancelText: 'İptal', destructive: false, hideCancel: false,
+  onConfirm: null, onCancel: null, onBackdropPress: null,
+  secondaryText: null, secondaryColor: '#8b5cf6', onSecondary: null,
 };
 
 export default function Home() {
   const { user } = useAuth();
   const userProfile = useSelector((st) => st.database.userProfile);
-  const { userProfile: dbProfile, loading: dbLoading, getProfile, addRecord, updateRecord, records, getWorkRecords } = useDatabase();
-  const { items, handleTeslimAl, handleTeslimEt } = useEnvanter();
+  const { userProfile: dbProfile, loading: dbLoading, getProfile, addRecord, updateRecord, records, getWorkRecordsFirstPage, getWorkRecordsFirstPageIfNeeded } = useDatabase();
+  const { items, getItemsFirstPageIfNeeded, handleTeslimAl, handleTeslimEt, getItemByQRData } = useEnvanter();
 
-  const [location, setLocation] = useState(null);
-  const [isInZone, setIsInZone] = useState(false);
-  const [locationLoading, setLocationLoading] = useState(true);
+  const { coords: location, isInZone, loading: locationLoading, error: locationError, refreshLocation } = useLocation();
+  const { gorevler, getGorevler } = useTakvim();
+  const role = userProfile?.role;
+  // Ref ile location'ı takip ediyoruz — GPS her 10sn güncellense bile callback'ler yeniden oluşturulmuyor
+  const locationRef = useRef(location);
+  useEffect(() => { locationRef.current = location; }, [location]);
   const [locationRefreshing, setLocationRefreshing] = useState(false);
-  const [locationError, setLocationError] = useState(null);
   const [checkInStatus, setCheckInStatus] = useState('idle');
   const [checkInTime, setCheckInTime] = useState(null);
   const [checkOutTime, setCheckOutTime] = useState(null);
@@ -65,7 +62,7 @@ export default function Home() {
   const [quickScan, setQuickScan] = useState(false);
   const [isDisMesai, setIsDisMesai] = useState(false);
 
-  const hideModal = useCallback(() => setModal((m) => ({ ...m, visible: false })), []);
+  const hideModal = useCallback(() => setModal((m) => ({ ...m, visible: false, onCancel: null })), []);
   const showModal = useCallback((cfg) => setModal({ ...MODAL_DEF, visible: true, onConfirm: () => setModal((m) => ({ ...m, visible: false })), ...cfg }), []);
   const showInfo = useCallback((title, message, icon = 'info', iconColor = '#ef4444') =>
     showModal({ title, message, icon, iconColor, confirmText: 'Tamam', hideCancel: true }), [showModal]);
@@ -78,22 +75,36 @@ export default function Home() {
   const onRefresh = useCallback(async () => {
     setRefreshing(true);
     try {
-      if (user?.uid) await Promise.all([getProfile(user.uid), getWorkRecords(user.uid)]);
+      if (user?.uid) await Promise.all([getProfile(user.uid), getWorkRecordsFirstPage(user.uid)]);
     } finally {
       setRefreshing(false);
     }
-  }, [user, getProfile, getWorkRecords]);
+  }, [user, getProfile, getWorkRecordsFirstPage]);
 
   const handleRefreshLocation = useCallback(async () => {
     setLocationRefreshing(true);
     try {
-      const loc = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.High });
-      setLocation(loc.coords);
-      setIsInZone(calcDistance(loc.coords, GEOFENCE_CONFIG.center) <= GEOFENCE_CONFIG.radius);
-      setLocationError(null);
-    } catch (_) {}
-    finally { setLocationRefreshing(false); }
-  }, []);
+      await refreshLocation();
+    } finally {
+      setLocationRefreshing(false);
+    }
+  }, [refreshLocation]);
+
+  useEffect(() => {
+    if (!user?.uid) return;
+    const task = InteractionManager.runAfterInteractions(() => {
+      getWorkRecordsFirstPageIfNeeded(user.uid);
+    });
+    return () => task.cancel();
+  }, [user?.uid, getWorkRecordsFirstPageIfNeeded]);
+
+  useEffect(() => {
+    if (quickScan) getItemsFirstPageIfNeeded();
+  }, [quickScan, getItemsFirstPageIfNeeded]);
+
+  useEffect(() => {
+    if (user?.uid && gorevler.length === 0) getGorevler(user.uid, role);
+  }, [user?.uid, role]);
 
   useEffect(() => {
     if (user?.uid && records && !hasShownAutoCheckoutAlert) {
@@ -113,7 +124,7 @@ export default function Home() {
           checkOutTime: co.toISOString(),
           checkOutLocation: yesterdayRecord.checkInLocation || null,
           autoCheckOut: true,
-        }).then(() => getWorkRecords(user.uid)).catch(() => {});
+        }).then(() => getWorkRecordsFirstPageIfNeeded(user.uid)).catch(() => {});
       }
 
       const todayRecord = userRecords.find(r => r.date === today);
@@ -137,146 +148,89 @@ export default function Home() {
     }
   }, [records, user]);
 
-  useEffect(() => {
-    let sub = null;
-    let mounted = true;
-    (async () => {
-      try {
-        const { status } = await Location.requestForegroundPermissionsAsync();
-        if (!mounted || status !== 'granted') {
-          setLocationError('Konum izni reddedildi');
-          setLocationLoading(false);
-          return;
+
+  // Tek giriş mantığı — tür: 'normal' | 'dis'
+  const performCheckIn = useCallback(async (type) => {
+    setIsProcessing(type);
+    try {
+      const now = new Date();
+      const loc = locationRef.current;
+      const recordData = {
+        userId: user.uid, displayName,
+        date: now.toISOString().split('T')[0],
+        checkInTime: now.toISOString(),
+        ...(type === 'dis' ? { disMesai: true } : {}),
+        ...(loc ? { checkInLocation: { latitude: loc.latitude, longitude: loc.longitude } } : {}),
+      };
+      const result = await addRecord(user.uid, recordData);
+      if (result.payload?.id) setRecordId(result.payload.id);
+      setCheckInTime(now);
+      setCheckInStatus('checked-in');
+      if (type === 'dis') setIsDisMesai(true);
+      setCelebrationType('check-in');
+      setCelebrationVisible(true);
+      notificationService.scheduleWorkReminders().catch(() => {});
+    } catch (err) {
+      showInfo('Hata', 'Giriş yapılamadı: ' + (err?.message || 'Bilinmeyen hata'));
+    } finally { setIsProcessing(null); }
+  }, [user, displayName, locationRef, addRecord, showInfo]);
+
+  const handleGirisSecim = useCallback(() => {
+    if (!displayName) { showInfo('Hata', 'Profil bilgileri eksik.'); return; }
+    if (checkInStatus !== 'idle') { showInfo('Hata', 'Bugün zaten giriş yaptınız.'); return; }
+
+    showModal({
+      icon: 'login', iconColor: '#ffd800',
+      title: 'Giriş Türü Seçin',
+      message: isInZone
+        ? 'Ofis girişi mi yoksa saha görevi girişi mi yapacaksınız?'
+        : 'Alan dışındasınız. Ofis girişi için alan içinde olmanız gerekir.',
+      confirmText: 'Ofis Girişi',
+      secondaryText: 'Saha Görevi',
+      secondaryColor: '#8b5cf6',
+      cancelText: 'İptal',
+      onBackdropPress: hideModal,
+      onCancel: hideModal,
+      onSecondary: () => { hideModal(); performCheckIn('dis'); },
+      onConfirm: () => {
+        hideModal();
+        if (!isInZone) { showInfo('Hata', 'Alan dışındasınız. Giriş yapılamaz.'); return; }
+        if (records && user?.uid) {
+          const yesterday = new Date();
+          yesterday.setDate(yesterday.getDate() - 1);
+          const yesterdayStr = yesterday.toISOString().split('T')[0];
+          const yesterdayRecord = records
+            .filter(r => r.userId === user.uid)
+            .find(r => r.date === yesterdayStr && !r.checkOutTime);
+          if (yesterdayRecord) {
+            showModal({
+              icon: 'warning', iconColor: '#f59e0b', title: 'Eksik Kayıt Var',
+              message: `Dün (${yesterday.toLocaleDateString('tr-TR')}) çıkış yapılmamış. Otomatik çıkış yapılsın mı?`,
+              confirmText: 'Otomatik Çıkış Yap', cancelText: 'İptal',
+              onConfirm: async () => {
+                hideModal();
+                const co = new Date(yesterday); co.setHours(18, 30, 0, 0);
+                await updateRecord(yesterdayRecord.id, { checkOutTime: co.toISOString(), autoCheckOut: true });
+                await getWorkRecordsFirstPageIfNeeded(user.uid);
+                performCheckIn('normal');
+              },
+            });
+            return;
+          }
         }
-        try {
-          const loc = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.High });
-          if (!mounted) return;
-          setLocation(loc.coords);
-          setIsInZone(calcDistance(loc.coords, GEOFENCE_CONFIG.center) <= GEOFENCE_CONFIG.radius);
-          setLocationLoading(false);
-        } catch (_) {}
-
-        sub = await Location.watchPositionAsync(
-          { accuracy: Location.Accuracy.High, timeInterval: 5000, distanceInterval: 10 },
-          (loc) => {
-            if (!mounted) return;
-            setLocation(loc.coords);
-            setIsInZone(calcDistance(loc.coords, GEOFENCE_CONFIG.center) <= GEOFENCE_CONFIG.radius);
-            setLocationLoading(false);
-          }
-        );
-      } catch (_) {
-        if (mounted) { setLocationError('Konum alınamadı'); setLocationLoading(false); }
-      }
-    })();
-    return () => { mounted = false; if (sub) try { sub.remove(); } catch (_) {} };
-  }, []);
-
-  const proceedWithCheckIn = useCallback(() => {
-    showModal({
-      icon: 'login', iconColor: '#10b981', title: 'Giriş Onayı',
-      message: `${new Date().toLocaleTimeString('tr-TR')} saatinde giriş yapılacak.`,
-      confirmText: 'Giriş Yap', cancelText: 'İptal',
-      onConfirm: async () => {
-        hideModal();
-        setIsProcessing('normal');
-        try {
-          const now = new Date();
-          const result = await addRecord(user.uid, {
-            userId: user.uid, displayName,
-            date: now.toISOString().split('T')[0],
-            checkInTime: now.toISOString(),
-            checkInLocation: { latitude: location.latitude, longitude: location.longitude },
-          });
-          if (result.payload?.id) setRecordId(result.payload.id);
-          setCheckInTime(now);
-          setCheckInStatus('checked-in');
-          setCelebrationType('check-in');
-          setCelebrationVisible(true);
-          notificationService.scheduleWorkReminders().catch(() => {});
-        } catch (err) {
-          showInfo('Hata', 'Giriş yapılamadı: ' + (err?.message || 'Bilinmeyen hata'));
-        } finally { setIsProcessing(null); }
+        performCheckIn('normal');
       },
     });
-  }, [showModal, hideModal, addRecord, user, displayName, location, showInfo]);
-
-  const handleDisMesaiCheckIn = useCallback(() => {
-    if (!displayName) { showInfo('Hata', 'Profil bilgileri eksik.'); return; }
-    if (checkInStatus !== 'idle') { showInfo('Hata', 'Bugün zaten giriş yaptınız.'); return; }
-
-    showModal({
-      icon: 'work-outline', iconColor: '#8b5cf6', title: 'Saha Görevi Girişi',
-      message: `${new Date().toLocaleTimeString('tr-TR')} saatinde saha görevi girişi yapılacak.\n\nSaha görevi kaydı ofis dışı çalışma olarak işaretlenecektir.`,
-      confirmText: 'Saha Görevi Giriş Yap', cancelText: 'İptal',
-      onConfirm: async () => {
-        hideModal();
-        setIsProcessing('dis');
-        try {
-          const now = new Date();
-          const recordData = {
-            userId: user.uid, displayName,
-            date: now.toISOString().split('T')[0],
-            checkInTime: now.toISOString(),
-            disMesai: true,
-          };
-          if (location) {
-            recordData.checkInLocation = { latitude: location.latitude, longitude: location.longitude };
-          }
-          const result = await addRecord(user.uid, recordData);
-          if (result.payload?.id) setRecordId(result.payload.id);
-          setCheckInTime(now);
-          setCheckInStatus('checked-in');
-          setIsDisMesai(true);
-          setCelebrationType('check-in');
-          setCelebrationVisible(true);
-          notificationService.scheduleWorkReminders().catch(() => {});
-        } catch (err) {
-          showInfo('Hata', 'Giriş yapılamadı: ' + (err?.message || 'Bilinmeyen hata'));
-        } finally { setIsProcessing(null); }
-      },
-    });
-  }, [displayName, checkInStatus, showModal, hideModal, addRecord, user, location, showInfo]);
-
-  const handleCheckIn = useCallback(async () => {
-    if (!displayName) { showInfo('Hata', 'Profil bilgileri eksik.'); return; }
-    if (!isInZone) { showInfo('Hata', 'Alan dışındasınız. Giriş yapılamaz.'); return; }
-    if (checkInStatus !== 'idle') { showInfo('Hata', 'Bugün zaten giriş yaptınız.'); return; }
-
-    if (records && user?.uid) {
-      const yesterday = new Date();
-      yesterday.setDate(yesterday.getDate() - 1);
-      const yesterdayStr = yesterday.toISOString().split('T')[0];
-      const userRecords = records.filter(r => r.userId === user.uid);
-      const yesterdayRecord = userRecords.find(r => r.date === yesterdayStr && !r.checkOutTime);
-
-      if (yesterdayRecord) {
-        showModal({
-          icon: 'warning', iconColor: '#f59e0b', title: 'Eksik Kayıt Var',
-          message: `Dün (${yesterday.toLocaleDateString('tr-TR')}) çıkış yapılmamış. Otomatik çıkış yapılsın mı?`,
-          confirmText: 'Otomatik Çıkış Yap', cancelText: 'İptal',
-          onConfirm: async () => {
-            hideModal();
-            const co = new Date(yesterday); co.setHours(18, 30, 0, 0);
-            await updateRecord(yesterdayRecord.id, { checkOutTime: co.toISOString(), autoCheckOut: true });
-            await getWorkRecords(user.uid);
-            proceedWithCheckIn();
-          },
-        });
-        return;
-      }
-    }
-    proceedWithCheckIn();
-  }, [displayName, isInZone, checkInStatus, records, user, showInfo, showModal, hideModal, updateRecord, getWorkRecords, proceedWithCheckIn]);
+  }, [displayName, checkInStatus, isInZone, showModal, hideModal, showInfo, records, user, updateRecord, getWorkRecordsFirstPageIfNeeded, performCheckIn]);
 
   const handleCheckOut = useCallback(async () => {
     if (!checkInTime || !recordId) { showInfo('Hata', 'Giriş kaydı bulunamadı.'); return; }
     if (checkOutTime) { showInfo('Hata', 'Bugün zaten çıkış yaptınız.'); return; }
     if (!isDisMesai && !isInZone) { showInfo('Uyarı', 'Çıkış için alan içinde olmalısınız.', 'warning', '#f59e0b'); return; }
 
-    const title = isDisMesai ? 'Saha Görevi Çıkışı' : 'Çıkış Onayı';
     showModal({
-      icon: 'logout', iconColor: '#ef4444', title,
+      icon: 'logout', iconColor: '#ef4444',
+      title: isDisMesai ? 'Saha Görevi Çıkışı' : 'Çıkış Onayı',
       message: `${new Date().toLocaleTimeString('tr-TR')} saatinde ${isDisMesai ? 'saha görevi ' : ''}çıkış yapılacak.`,
       confirmText: 'Çıkış Yap', cancelText: 'İptal', destructive: true,
       onConfirm: async () => {
@@ -284,10 +238,9 @@ export default function Home() {
         setIsProcessing('out');
         try {
           const now = new Date();
+          const loc = locationRef.current;
           const updateData = { checkOutTime: now.toISOString() };
-          if (location) {
-            updateData.checkOutLocation = { latitude: location.latitude, longitude: location.longitude };
-          }
+          if (loc) updateData.checkOutLocation = { latitude: loc.latitude, longitude: loc.longitude };
           await updateRecord(recordId, updateData);
           setCheckOutTime(now);
           setCheckInStatus('checked-out');
@@ -299,7 +252,7 @@ export default function Home() {
         } finally { setIsProcessing(null); }
       },
     });
-  }, [checkInTime, recordId, checkOutTime, isInZone, isDisMesai, showModal, hideModal, updateRecord, location, showInfo]);
+  }, [checkInTime, recordId, checkOutTime, isInZone, isDisMesai, showModal, hideModal, updateRecord, showInfo]);
 
   const onQuickTeslimAl = useCallback(async (item) => {
     const name = userProfile?.displayName || user?.email || 'Bilinmiyor';
@@ -307,164 +260,221 @@ export default function Home() {
   }, [userProfile, user, handleTeslimAl]);
 
   const onQuickTeslimEt = useCallback(async (item) => {
-    return await handleTeslimEt(item._docId, item.aktifHareketId);
-  }, [handleTeslimEt]);
-
-  if (locationLoading) {
-    return (
-      <View style={s.centerWrap}>
-        <ActivityIndicator size="large" color="#ffd800" />
-        <Text style={s.centerTxt}>Konum alınıyor...</Text>
-      </View>
-    );
-  }
-
-  if (locationError) {
-    return (
-      <View style={s.centerWrap}>
-        <MaterialIcons name="location-off" size={48} color="#ef4444" />
-        <Text style={s.errTitle}>Konum Hatası</Text>
-        <Text style={s.errMsg}>{locationError}</Text>
-      </View>
-    );
-  }
+    return await handleTeslimEt(item._docId, item.aktifHareketId, user?.uid, item.tur);
+  }, [handleTeslimEt, user]);
 
   const isCheckedIn  = checkInStatus === 'checked-in';
   const isCheckedOut = checkInStatus === 'checked-out';
   const isIdle       = checkInStatus === 'idle';
 
+  const AYLAR_KISA_H = ['Oca', 'Şub', 'Mar', 'Nis', 'May', 'Haz', 'Tem', 'Ağu', 'Eyl', 'Eki', 'Kas', 'Ara'];
+  const fmtGunAyH = (dateStr) => {
+    if (!dateStr) return '';
+    const d = new Date(dateStr + 'T00:00:00');
+    return `${d.getDate()} ${AYLAR_KISA_H[d.getMonth()]}`;
+  };
+  const PROJE_RENKLER_H = ['#6366f1', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#06b6d4', '#ec4899'];
+  const projeRenkH = (str = '') =>
+    PROJE_RENKLER_H[Math.abs((str || '').split('').reduce((a, c) => a + c.charCodeAt(0), 0)) % PROJE_RENKLER_H.length];
+
+  const buHaftaStr = toDateStr(getWeekStart(new Date()));
+  const buHaftaGorevleri = useMemo(() =>
+    gorevler.filter(g => gorevHaftaStr(g) === buHaftaStr),
+    [gorevler, buHaftaStr]
+  );
+
   return (
     <ScrollView
       style={s.root}
       contentContainerStyle={{ paddingBottom: 32 }}
-      refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#ffd800" />}
+      refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#ffffff" />}
     >
       <View style={s.header}>
-        <Image source={require('../../assets/paxLogoHv4.png')} style={s.logo} resizeMode="contain" />
-        <TouchableOpacity style={s.taratBtn} onPress={() => setQuickScan(true)} activeOpacity={0.8}>
-          <MaterialIcons name="qr-code-scanner" size={18} color="#0f172a" />
-          <Text style={s.taratBtnTxt}>Tarat</Text>
-        </TouchableOpacity>
+        <Image source={require('../../assets/Pax_Portal_Saydam.png')} style={s.logo} resizeMode="contain" />
       </View>
+      <View style={s.mainContent}>
 
-      <View style={[s.konumKart, isInZone ? s.konumKartIcinde : s.konumKartDisinda]}>
-        <View style={s.konumSol}>
-          <View style={[s.konumIkonWrap, { backgroundColor: isInZone ? '#10b98122' : '#ef444422' }]}>
-            <MaterialIcons name={isInZone ? 'location-on' : 'location-off'} size={20} color={isInZone ? '#10b981' : '#ef4444'} />
-          </View>
-          <View>
-            <Text style={[s.konumDurum, { color: isInZone ? '#10b981' : '#ef4444' }]}>
-              {isInZone ? 'Alan İçindesiniz' : 'Alan Dışındasınız'}
-            </Text>
-            <Text style={s.konumAlt}>
-              {isInZone ? 'Giriş/çıkış işlemi yapabilirsiniz' : 'Ofis alanına geliniz'}
-            </Text>
-          </View>
-        </View>
-        <TouchableOpacity style={s.konumYenileBtn} onPress={handleRefreshLocation} disabled={locationRefreshing}>
-          {locationRefreshing
-            ? <ActivityIndicator size="small" color="#ffd800" />
-            : <MaterialIcons name="my-location" size={20} color="#ffd800" />}
-        </TouchableOpacity>
-      </View>
+        {/* ── Bu Haftaki Görevler (EN ÜSTTE) ── */}
+        {buHaftaGorevleri.length > 0 && (
+          <View style={s.gorevKart}>
+            <View style={s.gorevKartBaslik}>
+              <View style={s.gorevKartBaslikSol}>
+                <View style={s.gorevKartIkon}>
+                  <MaterialIcons name="calendar-today" size={15} color="#ffd800" />
+                </View>
+                <View>
+                  <Text style={s.gorevKartBaslikTxt}>Bu Haftaki Görevler</Text>
+                  <Text style={s.gorevKartAltTxt}>{buHaftaGorevleri.filter(g => g.tamamlandi).length}/{buHaftaGorevleri.length} tamamlandı</Text>
+                </View>
+              </View>
+              <View style={s.gorevSayiBadge}>
+                <Text style={s.gorevSayiTxt}>{buHaftaGorevleri.length}</Text>
+              </View>
+            </View>
 
-      <View style={s.mesaiKart}>
-        <View style={s.mesaiBaslikRow}>
-          <Text style={s.mesaiBaslik}>Bugünkü Mesai</Text>
-          {isDisMesai && (
-            <View style={s.disMesaiBadge}>
-              <MaterialIcons name="work-outline" size={11} color="#8b5cf6" />
-              <Text style={s.disMesaiBadgeTxt}>Saha Görevi</Text>
+            {/* Progress bar */}
+            <View style={s.gorevProgressWrap}>
+              <View style={[s.gorevProgressBar, {
+                width: buHaftaGorevleri.length > 0
+                  ? `${(buHaftaGorevleri.filter(g => g.tamamlandi).length / buHaftaGorevleri.length) * 100}%`
+                  : '0%'
+              }]} />
+            </View>
+
+            {buHaftaGorevleri.slice(0, 4).map(g => {
+              const renk = g.tamamlandi ? '#10b981' : projeRenkH(g.proje);
+              return (
+                <View key={g.id} style={[s.gorevSatir, g.tamamlandi && { opacity: 0.55 }]}>
+                  <View style={[s.gorevSerit, { backgroundColor: renk }]} />
+                  <View style={s.gorevSatirIcerik}>
+                    <View style={s.gorevSatirUst}>
+                      <View style={[s.gorevProjeBadge, { backgroundColor: renk + '18' }]}>
+                        <Text style={[s.gorevProje, { color: renk }]} numberOfLines={1}>{g.proje}</Text>
+                      </View>
+                      {g.tamamlandi
+                        ? <MaterialIcons name="check-circle" size={14} color="#10b981" />
+                        : <Text style={s.gorevTarih}>{fmtGunAyH(g.teslim)}</Text>}
+                    </View>
+                    <Text style={[s.gorevIs, g.tamamlandi && { textDecorationLine: 'line-through' }]} numberOfLines={1}>{g.is}</Text>
+                    {g.sorumlular?.length > 0 && (
+                      <View style={s.gorevSorumluRow}>
+                        {g.sorumlular.slice(0, 3).map(sr => (
+                          <View key={sr.uid} style={[s.gorevSorumluChip, { backgroundColor: projeRenkH(sr.displayName) + '18' }]}>
+                            <Text style={[s.gorevSorumluTxt, { color: projeRenkH(sr.displayName) }]}>
+                              {(sr.displayName || '').split(' ')[0]}
+                            </Text>
+                          </View>
+                        ))}
+                        {g.sorumlular.length > 3 && <Text style={s.gorevSorumluFazla}>+{g.sorumlular.length - 3}</Text>}
+                      </View>
+                    )}
+                  </View>
+                </View>
+              );
+            })}
+
+            {buHaftaGorevleri.length > 4 && (
+              <View style={s.gorevFazlaRow}>
+                <MaterialIcons name="more-horiz" size={14} color="#444444" />
+                <Text style={s.gorevFazla}>{buHaftaGorevleri.length - 4} görev daha</Text>
+              </View>
+            )}
+          </View>
+        )}
+
+        <View style={s.mesaiKart}>
+          <View style={s.mesaiBaslikRow}>
+            <Text style={s.mesaiBaslik}>Bugünkü Mesai</Text>
+            {isDisMesai && (
+              <View style={s.disMesaiBadge}>
+                <MaterialIcons name="work-outline" size={11} color="#8b5cf6" />
+                <Text style={s.disMesaiBadgeTxt}>Saha Görevi</Text>
+              </View>
+            )}
+          </View>
+          <View style={s.zamanRow}>
+            <View style={[s.zamanKutu, s.zamanKutuGiris]}>
+              <View style={s.zamanIkon}><MaterialIcons name="login" size={13} color="#10b981" /></View>
+              <Text style={s.zamanEtiket}>Giriş</Text>
+              <Text style={[s.zamanSaat, { color: checkInTime ? '#ffffff' : '#333333' }]}>{fmtSaat(checkInTime)}</Text>
+            </View>
+            <MaterialIcons name="arrow-forward" size={14} color="#333333" />
+            <View style={[s.zamanKutu, s.zamanKutuCikis]}>
+              <View style={s.zamanIkon}><MaterialIcons name="logout" size={13} color="#888888" /></View>
+              <Text style={s.zamanEtiket}>Çıkış</Text>
+              <Text style={[s.zamanSaat, { color: checkOutTime ? '#ff4444' : '#333333' }]}>{fmtSaat(checkOutTime)}</Text>
+            </View>
+          </View>
+          {isCheckedOut && (
+            <View style={s.tamamRow}>
+              <MaterialIcons name="check-circle" size={16} color="#ffd800" />
+              <Text style={s.tamamTxt}>Bugünkü mesai tamamlandı</Text>
             </View>
           )}
         </View>
-        <View style={s.zamanRow}>
-          <View style={[s.zamanKutu, s.zamanKutuGiris]}>
-            <View style={s.zamanIkon}><MaterialIcons name="login" size={16} color="#10b981" /></View>
-            <Text style={s.zamanEtiket}>Giriş</Text>
-            <Text style={[s.zamanSaat, { color: checkInTime ? '#10b981' : '#334155' }]}>{fmtSaat(checkInTime)}</Text>
-          </View>
-          <MaterialIcons name="arrow-forward" size={18} color="#334155" />
-          <View style={[s.zamanKutu, s.zamanKutuCikis]}>
-            <View style={s.zamanIkon}><MaterialIcons name="logout" size={16} color="#ef4444" /></View>
-            <Text style={s.zamanEtiket}>Çıkış</Text>
-            <Text style={[s.zamanSaat, { color: checkOutTime ? '#ef4444' : '#334155' }]}>{fmtSaat(checkOutTime)}</Text>
-          </View>
-        </View>
-        {isCheckedOut && (
-          <View style={s.tamamRow}>
-            <MaterialIcons name="check-circle" size={16} color="#ffd800" />
-            <Text style={s.tamamTxt}>Bugünkü mesai tamamlandı</Text>
-          </View>
-        )}
-      </View>
 
-      <View style={s.aksiyonWrap}>
-        {isIdle && !isInZone && (
-          <View style={s.uyariKutu}>
-            <MaterialIcons name="info-outline" size={16} color="#94a3b8" />
-            <Text style={s.uyariTxt}>Giriş için ofis alanına geliniz</Text>
-          </View>
-        )}
-        {isIdle && isInZone && (
-          <TouchableOpacity style={s.girisBtn} onPress={handleCheckIn} disabled={!!isProcessing} activeOpacity={0.85}>
-            {isProcessing === 'normal'
-              ? <ActivityIndicator color="#fff" />
-              : <><MaterialIcons name="login" size={22} color="#fff" /><Text style={s.aksiyonBtnTxt}>Giriş Yap</Text></>}
-          </TouchableOpacity>
-        )}
+        <CardButton
+          onPress={handleRefreshLocation}
+          disabled={locationRefreshing || locationLoading}
+          stripeColor={locationLoading ? '#888888' : locationError || !isInZone ? '#ff4444' : '#ffd800'}
+          borderColor={locationLoading ? '#33333366' : locationError || !isInZone ? '#ff444433' : '#ffd80033'}
+          iconBgColor={locationLoading ? '#ffffff0a' : locationError || !isInZone ? '#ff444415' : '#ffd80012'}
+          iconBorderColor={locationLoading ? '#33333344' : locationError || !isInZone ? '#ff444433' : '#ffd80033'}
+          iconElement={
+            locationLoading
+              ? <ActivityIndicator size="small" color="#888888" />
+              : <MaterialIcons name={isInZone && !locationError ? 'location-on' : 'location-off'} size={24} color={locationError || !isInZone ? '#ff4444' : '#ffd800'} />
+          }
+          title={locationLoading ? 'Konum Alınıyor...' : locationError ? 'Konum Hatası' : isInZone ? 'Alan İçindesiniz' : 'Alan Dışındasınız'}
+          titleColor={locationLoading ? '#888888' : locationError || !isInZone ? '#ff4444' : '#e0e0e0'}
+          subtitle={locationLoading ? 'Lütfen bekleyin' : locationError ? locationError : isInZone ? 'Giriş/çıkış işlemi yapabilirsiniz' : 'Ofis alanına geliniz'}
+          rightElement={
+            <View style={[s.konumOkKutu, { backgroundColor: locationError || !isInZone ? '#ff444415' : '#ffd80012' }]}>
+              {locationRefreshing
+                ? <ActivityIndicator size="small" color="#ffd800" />
+                : <MaterialIcons name="my-location" size={20} color={isInZone && !locationError ? '#ffd800' : '#ff4444'} />}
+            </View>
+          }
+        />
+
+        <CardButton
+          onPress={() => setQuickScan(true)}
+          icon="qr-code-scanner"
+          iconSize={26}
+          title="Hızlı Tarat"
+          subtitle="QR okutarak ekipmanı bul ve işlem yap"
+        />
 
         {isIdle && (
-          <TouchableOpacity style={s.disMesaiBtn} onPress={handleDisMesaiCheckIn} disabled={!!isProcessing} activeOpacity={0.85}>
-            {isProcessing === 'dis'
-              ? <ActivityIndicator color="#8b5cf6" />
-              : <>
-                  <View style={s.disMesaiIkonWrap}>
-                    <MaterialIcons name="work-outline" size={18} color="#8b5cf6" />
-                  </View>
-                  <View style={s.disMesaiBtnMetin}>
-                    <Text style={s.disMesaiBtnTxt}>Saha Görevi Giriş Yap</Text>
-                    <Text style={s.disMesaiBtnAlt}>Ofis dışı çalışma için alan kontrolü gerekmez</Text>
-                  </View>
-                  <MaterialIcons name="chevron-right" size={20} color="#8b5cf6" />
-                </>}
-          </TouchableOpacity>
+          <CardButton
+            onPress={handleGirisSecim}
+            disabled={!!isProcessing}
+            loading={isProcessing === 'normal' || isProcessing === 'dis'}
+            icon="login"
+            title="Giriş Yap"
+            subtitle="Ofis veya saha görevi girişi"
+          />
         )}
 
         {isCheckedIn && (
-          <>
-            {!isDisMesai && !isInZone && (
-              <View style={s.uyariKutu}>
-                <MaterialIcons name="info-outline" size={16} color="#94a3b8" />
-                <Text style={s.uyariTxt}>Çıkış için ofis alanına geliniz</Text>
-              </View>
-            )}
-            <TouchableOpacity
-              style={[s.cikisBtn, !isDisMesai && !isInZone && s.btnDisabled]}
-              onPress={handleCheckOut}
-              disabled={!!isProcessing || (!isDisMesai && !isInZone)}
-              activeOpacity={0.85}
-            >
-              {isProcessing === 'out'
-                ? <ActivityIndicator color="#fff" />
-                : <><MaterialIcons name="logout" size={22} color="#fff" /><Text style={s.aksiyonBtnTxt}>{isDisMesai ? 'Saha Görevi Çıkış Yap' : 'Çıkış Yap'}</Text></>}
-            </TouchableOpacity>
-          </>
+          <CardButton
+            style={!isDisMesai && !isInZone ? s.btnDisabled : undefined}
+            onPress={handleCheckOut}
+            disabled={!!isProcessing || (!isDisMesai && !isInZone)}
+            loading={isProcessing === 'out'}
+            loadingColor="#ff4444"
+            stripeColor="#ff4444"
+            borderColor="#ff444433"
+            icon="logout"
+            iconColor="#ff4444"
+            iconBgColor="#ff444415"
+            iconBorderColor="#ff444433"
+            title={isDisMesai ? 'Saha Görevi Çıkış Yap' : 'Çıkış Yap'}
+            subtitle={isDisMesai ? 'Saha görevi bitiş kaydı yapılacak' : !isInZone ? 'Çıkış için ofis alanına geliniz' : 'Bugünkü mesai sonlandırılacak'}
+            titleColor={!isDisMesai && !isInZone ? '#555555' : '#e0e0e0'}
+            rightIconColor="#ff4444"
+            rightBgColor="#ff444415"
+          />
         )}
+
       </View>
 
-      <CelebrationModal
-        visible={celebrationVisible}
-        type={celebrationType}
-        userName={displayName}
-        userId={user?.uid}
-        onClose={() => setCelebrationVisible(false)}
-      />
+      {celebrationVisible && (
+        <CelebrationModal
+          visible={celebrationVisible}
+          type={celebrationType}
+          userName={displayName}
+          userId={user?.uid}
+          onClose={() => setCelebrationVisible(false)}
+        />
+      )}
       <ConfirmModal
         visible={modal.visible} icon={modal.icon} iconColor={modal.iconColor}
         title={modal.title} message={modal.message} confirmText={modal.confirmText}
         cancelText={modal.cancelText} destructive={modal.destructive}
-        hideCancel={modal.hideCancel} onConfirm={modal.onConfirm} onCancel={hideModal}
+        hideCancel={modal.hideCancel} onConfirm={modal.onConfirm} onCancel={modal.onCancel || hideModal}
+        onBackdropPress={modal.onBackdropPress || hideModal}
+        secondaryText={modal.secondaryText} secondaryColor={modal.secondaryColor} onSecondary={modal.onSecondary}
       />
       <QuickScanModal
         visible={quickScan}
@@ -475,106 +485,105 @@ export default function Home() {
         onTeslimAl={onQuickTeslimAl}
         onTeslimEt={onQuickTeslimEt}
         onClose={() => setQuickScan(false)}
+        onFetchItem={getItemByQRData}
       />
     </ScrollView>
   );
 }
 
 const s = StyleSheet.create({
-  root: { flex: 1, backgroundColor: '#0f172a' },
-  centerWrap: { flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#0f172a', gap: 12 },
-  centerTxt: { fontSize: 14, color: '#64748b' },
-  errTitle: { fontSize: 18, fontWeight: '700', color: '#ef4444', marginTop: 8 },
-  errMsg: { fontSize: 13, color: '#64748b', textAlign: 'center', paddingHorizontal: 32, marginTop: 4 },
+  root: { flex: 1, backgroundColor: '#000000' },
+  centerWrap: { flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#000000', gap: 12 },
+  centerTxt: { fontSize: 14, color: '#555555' },
+  errTitle: { fontSize: 18, fontWeight: '700', color: '#ff4444', marginTop: 8 },
+  errMsg: { fontSize: 13, color: '#555555', textAlign: 'center', paddingHorizontal: 32, marginTop: 4 },
   header: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
+    backgroundColor: '#111111', paddingHorizontal: 16, paddingTop: 14, paddingBottom: 14,
+    borderBottomWidth: 1, borderBottomColor: '#1e1e1e',
+  },
+  logo: { width: 220, height: 50 },
+  mainContent: {
+    paddingHorizontal: 14, paddingTop: 14, paddingBottom: 4, gap: 12,
+  },
+  gorevKart: {
+    backgroundColor: '#111111', borderRadius: 16,
+    borderWidth: 1, borderColor: '#ffd80022', overflow: 'hidden',
+  },
+  gorevKartBaslik: {
     flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
-    backgroundColor: '#1e293b', paddingHorizontal: 16, paddingTop: 14, paddingBottom: 14,
-    borderBottomWidth: 1, borderBottomColor: '#334155',
+    paddingHorizontal: 14, paddingTop: 14, paddingBottom: 12,
   },
-  logo: { width: 140, height: 52 },
-  taratBtn: {
-    flexDirection: 'row', alignItems: 'center', gap: 6,
-    backgroundColor: '#ffd800', borderRadius: 10, paddingVertical: 8, paddingHorizontal: 14,
+  gorevKartBaslikSol: { flexDirection: 'row', alignItems: 'center', gap: 10 },
+  gorevKartIkon: {
+    width: 32, height: 32, borderRadius: 10,
+    backgroundColor: '#ffd80015', borderWidth: 1, borderColor: '#ffd80030',
+    alignItems: 'center', justifyContent: 'center',
   },
-  taratBtnTxt: { fontSize: 13, fontWeight: '800', color: '#0f172a' },
-  konumKart: {
-    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
-    marginHorizontal: 14, marginTop: 10, borderRadius: 14, padding: 14, borderWidth: 1,
+  gorevKartBaslikTxt: { fontSize: 13, fontWeight: '700', color: '#e0e0e0' },
+  gorevKartAltTxt: { fontSize: 11, color: '#555555', marginTop: 1 },
+  gorevSayiBadge: {
+    backgroundColor: '#ffd80018', borderRadius: 10, borderWidth: 1, borderColor: '#ffd80033',
+    paddingHorizontal: 10, paddingVertical: 4,
   },
-  konumKartIcinde: { backgroundColor: '#052e1622', borderColor: '#10b98133' },
-  konumKartDisinda: { backgroundColor: '#7f1d1d22', borderColor: '#ef444433' },
-  konumSol: { flexDirection: 'row', alignItems: 'center', gap: 12, flex: 1 },
-  konumIkonWrap: { width: 40, height: 40, borderRadius: 12, alignItems: 'center', justifyContent: 'center' },
-  konumDurum: { fontSize: 14, fontWeight: '700' },
-  konumAlt: { fontSize: 11, color: '#64748b', marginTop: 2 },
-  konumYenileBtn: {
-    width: 38, height: 38, borderRadius: 19,
-    backgroundColor: '#0f172a', alignItems: 'center', justifyContent: 'center',
-    borderWidth: 1, borderColor: '#334155',
+  gorevSayiTxt: { fontSize: 13, fontWeight: '800', color: '#ffd800' },
+  gorevProgressWrap: {
+    height: 2, backgroundColor: '#1e1e1e', marginHorizontal: 14, marginBottom: 4, borderRadius: 1,
+  },
+  gorevProgressBar: { height: 2, backgroundColor: '#10b981', borderRadius: 1 },
+  gorevSatir: {
+    flexDirection: 'row', alignItems: 'stretch',
+    borderTopWidth: 1, borderTopColor: '#1a1a1a',
+  },
+  gorevSerit: { width: 3 },
+  gorevSatirIcerik: { flex: 1, paddingHorizontal: 12, paddingVertical: 10, gap: 5 },
+  gorevSatirUst: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 8 },
+  gorevProjeBadge: { paddingHorizontal: 7, paddingVertical: 2, borderRadius: 6, maxWidth: '60%' },
+  gorevProje: { fontSize: 11, fontWeight: '700' },
+  gorevTarih: { fontSize: 11, color: '#444444' },
+  gorevIs: { fontSize: 13, color: '#888888', lineHeight: 18 },
+  gorevSorumluRow: { flexDirection: 'row', alignItems: 'center', gap: 5, flexWrap: 'wrap' },
+  gorevSorumluChip: { paddingHorizontal: 6, paddingVertical: 2, borderRadius: 5 },
+  gorevSorumluTxt: { fontSize: 10, fontWeight: '700' },
+  gorevSorumluFazla: { fontSize: 10, color: '#444444' },
+  gorevFazlaRow: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 4,
+    paddingVertical: 10, borderTopWidth: 1, borderTopColor: '#1a1a1a',
+  },
+  gorevFazla: { fontSize: 12, color: '#444444' },
+  konumOkKutu: {
+    width: 32, height: 32, borderRadius: 16,
+    alignItems: 'center', justifyContent: 'center', marginRight: 14,
   },
   mesaiKart: {
-    backgroundColor: '#1e293b', marginHorizontal: 14, marginTop: 10,
-    borderRadius: 16, padding: 16, gap: 14, borderWidth: 1, borderColor: '#334155',
+    backgroundColor: '#141414', borderRadius: 14, padding: 12, gap: 10, borderWidth: 1, borderColor: '#2a2a2a',
   },
-  mesaiBaslik: { fontSize: 11, fontWeight: '700', color: '#475569', textTransform: 'uppercase', letterSpacing: 0.5 },
-  zamanRow: { flexDirection: 'row', alignItems: 'center', gap: 10 },
+  mesaiBaslik: { fontSize: 10, fontWeight: '700', color: '#888888', textTransform: 'uppercase', letterSpacing: 0.5 },
+  zamanRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   zamanKutu: {
-    flex: 1, alignItems: 'center', borderRadius: 12, paddingVertical: 12, gap: 5, borderWidth: 1,
+    flex: 1, alignItems: 'center', borderRadius: 8, paddingVertical: 8, gap: 3, borderWidth: 1,
   },
-  zamanKutuGiris: { backgroundColor: '#10b98110', borderColor: '#10b98130' },
-  zamanKutuCikis: { backgroundColor: '#ef444410', borderColor: '#ef444430' },
+  zamanKutuGiris: { backgroundColor: '#ffffff08', borderColor: '#22222288' },
+  zamanKutuCikis: { backgroundColor: '#ffffff08', borderColor: '#22222288' },
   zamanIkon: {
-    width: 30, height: 30, borderRadius: 10,
-    backgroundColor: '#0f172a', alignItems: 'center', justifyContent: 'center',
+    width: 24, height: 24, borderRadius: 8,
+    backgroundColor: '#000000', alignItems: 'center', justifyContent: 'center',
   },
-  zamanEtiket: { fontSize: 10, color: '#64748b', fontWeight: '700', textTransform: 'uppercase' },
-  zamanSaat: { fontSize: 20, fontWeight: '800' },
+  zamanEtiket: { fontSize: 9, color: '#555555', fontWeight: '700', textTransform: 'uppercase' },
+  zamanSaat: { fontSize: 17, fontWeight: '800' },
   tamamRow: {
     flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
     gap: 7, backgroundColor: '#ffd80012', borderRadius: 8,
-    paddingVertical: 8, borderWidth: 1, borderColor: '#ffd80030',
+    paddingVertical: 8, borderWidth: 1, borderColor: '#ffd80033',
   },
   tamamTxt: { fontSize: 13, color: '#ffd800', fontWeight: '600' },
-  aksiyonWrap: { marginHorizontal: 14, marginTop: 10, gap: 10 },
-  uyariKutu: {
-    flexDirection: 'row', alignItems: 'center', gap: 8,
-    backgroundColor: '#1e293b', borderRadius: 12,
-    paddingVertical: 13, paddingHorizontal: 16, borderWidth: 1, borderColor: '#334155',
-  },
-  uyariTxt: { fontSize: 13, color: '#64748b' },
-  girisBtn: {
-    flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
-    backgroundColor: '#10b981', borderRadius: 14, paddingVertical: 16, gap: 10,
-    shadowColor: '#10b981', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.3, shadowRadius: 10, elevation: 6,
-  },
-  cikisBtn: {
-    flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
-    backgroundColor: '#ef4444', borderRadius: 14, paddingVertical: 16, gap: 10,
-    shadowColor: '#ef4444', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.3, shadowRadius: 10, elevation: 6,
-  },
   btnDisabled: { opacity: 0.45 },
-  aksiyonBtnTxt: { fontSize: 16, fontWeight: '800', color: '#fff' },
   mesaiBaslikRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   disMesaiBadge: {
     flexDirection: 'row', alignItems: 'center', gap: 4,
-    backgroundColor: '#8b5cf615', borderRadius: 8,
+    backgroundColor: '#ffffff0a', borderRadius: 8,
     paddingHorizontal: 8, paddingVertical: 3,
-    borderWidth: 1, borderColor: '#8b5cf633',
+    borderWidth: 1, borderColor: '#33333344',
   },
-  disMesaiBadgeTxt: { fontSize: 10, fontWeight: '700', color: '#8b5cf6' },
-  disMesaiBtn: {
-    flexDirection: 'row', alignItems: 'center', gap: 12,
-    justifyContent: 'center',
-    backgroundColor: '#1e293b', borderRadius: 14,
-    paddingVertical: 14, paddingHorizontal: 16,
-    borderWidth: 1.5, borderColor: '#8b5cf633',
-  },
-  disMesaiIkonWrap: {
-    width: 40, height: 40, borderRadius: 12,
-    backgroundColor: '#8b5cf615', alignItems: 'center', justifyContent: 'center',
-    borderWidth: 1, borderColor: '#8b5cf633',
-  },
-  disMesaiBtnMetin: { flex: 1, gap: 2 },
-  disMesaiBtnTxt: { fontSize: 14, fontWeight: '700', color: '#8b5cf6' },
-  disMesaiBtnAlt: { fontSize: 11, color: '#64748b' },
+  disMesaiBadgeTxt: { fontSize: 10, fontWeight: '700', color: '#888888' },
 });

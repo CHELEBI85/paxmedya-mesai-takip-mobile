@@ -63,18 +63,27 @@ const RecordCard = React.memo(function RecordCard({ record, formatTime, formatDa
 
 export default function Analysis() {
   const { user } = useAuth();
-  const { records, loading, getWorkRecords } = useDatabase();
+  const {
+    records,
+    loading,
+    loadingMore,
+    recordsCursor,
+    recordsHasMore,
+    getWorkRecordsFirstPage,
+    getWorkRecordsFirstPageIfNeeded,
+    getWorkRecordsNextPage,
+  } = useDatabase();
   const [refreshing, setRefreshing] = useState(false);
 
   useEffect(() => {
-    if (user?.uid) getWorkRecords(user.uid);
-  }, [user]);
+    if (user?.uid) getWorkRecordsFirstPageIfNeeded(user.uid);
+  }, [user?.uid, getWorkRecordsFirstPageIfNeeded]);
 
   const userRecords = useMemo(() => {
     if (!records || !user?.uid) return [];
     return records
       .filter((r) => r.userId === user.uid)
-      .sort((a, b) => new Date(b.checkInTime) - new Date(a.checkInTime));
+      .sort((a, b) => new Date(b.checkInTime || 0) - new Date(a.checkInTime || 0));
   }, [records, user]);
 
   const totalHours = useMemo(() => {
@@ -87,11 +96,16 @@ export default function Analysis() {
   const onRefresh = useCallback(async () => {
     setRefreshing(true);
     try {
-      if (user?.uid) await getWorkRecords(user.uid);
+      if (user?.uid) await getWorkRecordsFirstPage(user.uid);
     } finally {
       setRefreshing(false);
     }
-  }, [user, getWorkRecords]);
+  }, [user, getWorkRecordsFirstPage]);
+
+  const onEndReached = useCallback(() => {
+    if (!user?.uid || !recordsHasMore || loadingMore || !recordsCursor) return;
+    getWorkRecordsNextPage(user.uid, recordsCursor);
+  }, [user?.uid, recordsHasMore, loadingMore, recordsCursor, getWorkRecordsNextPage]);
 
   const formatTime = useCallback((timeString) => {
     return new Date(timeString).toLocaleTimeString('tr-TR', { hour: '2-digit', minute: '2-digit' });
@@ -152,6 +166,16 @@ export default function Analysis() {
     </View>
   );
 
+  const ListFooterComponent = useCallback(() => {
+    if (!loadingMore) return null;
+    return (
+      <View style={styles.footerLoader}>
+        <ActivityIndicator size="small" color="#ffd800" />
+        <Text style={styles.footerLoaderText}>Kayıtlar yükleniyor...</Text>
+      </View>
+    );
+  }, [loadingMore]);
+
   return (
     <FlatList
       style={styles.container}
@@ -160,10 +184,13 @@ export default function Analysis() {
       keyExtractor={keyExtractor}
       ListHeaderComponent={ListHeader}
       ListEmptyComponent={ListEmpty}
+      ListFooterComponent={ListFooterComponent}
       contentContainerStyle={{ paddingBottom: 24 }}
       refreshControl={
         <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#ffd800" title="Yenileniyor..." titleColor="#ffd800" />
       }
+      onEndReached={onEndReached}
+      onEndReachedThreshold={0.3}
       initialNumToRender={10}
       maxToRenderPerBatch={10}
       windowSize={5}
@@ -217,4 +244,6 @@ const styles = StyleSheet.create({
   locationText: { fontSize: 12, color: '#94a3b8' },
   emptyState: { alignItems: 'center', paddingVertical: 40 },
   emptyStateText: { fontSize: 16, color: '#94a3b8', marginTop: 12 },
+  footerLoader: { paddingVertical: 16, alignItems: 'center', gap: 8 },
+  footerLoaderText: { fontSize: 13, color: '#94a3b8' },
 });

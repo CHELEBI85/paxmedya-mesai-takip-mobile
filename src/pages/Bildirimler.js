@@ -68,9 +68,9 @@ export default function Bildirimler() {
         <MaterialIcons
           name={item.tur === 'motivasyon' ? 'favorite' : 'inventory'}
           size={14}
-          color={item.tur === 'motivasyon' ? '#ec4899' : '#10b981'}
+          color="#888888"
         />
-        <Text style={[s.turTxt, item.tur === 'motivasyon' && { color: '#ec4899' }]}>{item.tur}</Text>
+        <Text style={s.turTxt}>{item.tur}</Text>
       </View>
       <Text style={s.baslik}>{item.baslik}</Text>
       <Text style={s.aciklama}>{item.aciklama}</Text>
@@ -98,7 +98,7 @@ export default function Bildirimler() {
       <ScrollView style={s.scroll} contentContainerStyle={s.scrollContent} showsVerticalScrollIndicator={false}>
         <View style={s.bolum}>
           <View style={s.bolumBaslik}>
-            <MaterialIcons name="notifications-active" size={20} color="#6366f1" />
+            <MaterialIcons name="notifications-active" size={20} color="#888888" />
             <Text style={s.bolumBaslikTxt}>Saatlik bildirimler</Text>
           </View>
           <Text style={s.bolumAciklama}>Mesai giriş/çıkış hatırlatmaları. Giriş yaptığınız gün bu saatlerde tetiklenir.</Text>
@@ -111,7 +111,7 @@ export default function Bildirimler() {
 
         <View style={s.bolum}>
           <View style={s.bolumBaslik}>
-            <MaterialIcons name="category" size={20} color="#10b981" />
+            <MaterialIcons name="category" size={20} color="#888888" />
             <Text style={s.bolumBaslikTxt}>Diğer bildirimler</Text>
           </View>
           <Text style={s.bolumAciklama}>Ekipman ve diğer hatırlatmalar.</Text>
@@ -127,23 +127,25 @@ export default function Bildirimler() {
 }
 
 const s = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#0f172a' },
+  container: { flex: 1, backgroundColor: '#000000' },
   aramaWrap: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#1e293b',
+    backgroundColor: '#111111',
     marginHorizontal: 16,
     marginTop: 12,
     marginBottom: 8,
     paddingHorizontal: 12,
     paddingVertical: 10,
-    borderRadius: 12,
+    borderRadius: 10,
     gap: 10,
+    borderWidth: 1,
+    borderColor: '#222222',
   },
   aramaInput: {
     flex: 1,
     fontSize: 15,
-    color: '#f1f5f9',
+    color: '#ffffff',
     paddingVertical: 4,
   },
   scroll: { flex: 1 },
@@ -155,42 +157,44 @@ const s = StyleSheet.create({
     gap: 8,
     marginBottom: 4,
   },
-  bolumBaslikTxt: { fontSize: 17, fontWeight: '700', color: '#f1f5f9' },
-  bolumAciklama: { fontSize: 13, color: '#94a3b8', marginBottom: 12 },
+  bolumBaslikTxt: { fontSize: 16, fontWeight: '700', color: '#ffffff' },
+  bolumAciklama: { fontSize: 13, color: '#555555', marginBottom: 12 },
   kart: {
-    backgroundColor: '#1e293b',
-    borderRadius: 12,
+    backgroundColor: '#141414',
+    borderRadius: 10,
     padding: 14,
     marginBottom: 10,
-    borderLeftWidth: 4,
-    borderLeftColor: '#334155',
+    borderWidth: 1,
+    borderColor: '#2a2a2a',
+    borderLeftWidth: 3,
+    borderLeftColor: '#3a3a3a',
   },
   saatBadge: {
     flexDirection: 'row',
     alignItems: 'center',
     alignSelf: 'flex-start',
     gap: 6,
-    backgroundColor: '#6366f133',
+    backgroundColor: '#222222',
     paddingHorizontal: 10,
-    paddingVertical: 6,
-    borderRadius: 8,
+    paddingVertical: 5,
+    borderRadius: 6,
     marginBottom: 8,
   },
-  saatTxt: { fontSize: 13, fontWeight: '600', color: '#6366f1' },
+  saatTxt: { fontSize: 12, fontWeight: '600', color: '#888888' },
   turBadge: {
     flexDirection: 'row',
     alignItems: 'center',
     alignSelf: 'flex-start',
     gap: 6,
-    backgroundColor: '#10b98133',
+    backgroundColor: '#222222',
     paddingHorizontal: 10,
-    paddingVertical: 6,
-    borderRadius: 8,
+    paddingVertical: 5,
+    borderRadius: 6,
     marginBottom: 8,
   },
-  turBadgeMotivasyon: { backgroundColor: '#ec489933' },
-  turTxt: { fontSize: 13, fontWeight: '600', color: '#10b981' },
-  baslik: { fontSize: 15, fontWeight: '600', color: '#f1f5f9', marginBottom: 4 },
-  aciklama: { fontSize: 13, color: '#94a3b8', lineHeight: 20 },
-  bosTxt: { fontSize: 14, color: '#64748b', fontStyle: 'italic', paddingVertical: 12 },
+  turBadgeMotivasyon: { backgroundColor: '#222222' },
+  turTxt: { fontSize: 12, fontWeight: '600', color: '#888888' },
+  baslik: { fontSize: 15, fontWeight: '600', color: '#ffffff', marginBottom: 4 },
+  aciklama: { fontSize: 13, color: '#666666', lineHeight: 20 },
+  bosTxt: { fontSize: 14, color: '#444444', fontStyle: 'italic', paddingVertical: 12 },
 });

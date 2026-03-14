@@ -16,7 +16,9 @@ expo-env.d.ts
 *.p8
 *.p12
 *.key
+*.keystore
 *.mobileprovision
+android/gradle.properties
 
 # Metro
 .metro-health-check*
@@ -37,6 +39,5 @@ yarn-error.*
 # typescript
 *.tsbuildinfo
 
-# generated native folders
+# generated native folders (android/ artık Android Studio için kullanılıyor)
 /ios
-/android

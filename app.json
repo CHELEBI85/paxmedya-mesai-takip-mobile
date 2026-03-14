@@ -1,20 +1,20 @@
 {
   "expo": {
-    "name": "Pax Medya Mesai Takip",
-    "slug": "paxmedya-mesai-takip",
+    "name": "Pax Portal",
+    "slug": "pax-portal",
     "version": "1.0.0",
     "orientation": "portrait",
-    "icon": "./assets/logo.png",
+    "icon": "./assets/icon.png",
     "userInterfaceStyle": "automatic",
     "newArchEnabled": true,
     "splash": {
-      "image": "./assets/logo.png",
+      "image": "./assets/icon.png",
       "resizeMode": "contain",
       "backgroundColor": "#000000"
     },
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "com.paxmedya.mesaitakip",
+      "bundleIdentifier": "com.paxmedya.paxportal",
       "infoPlist": {
         "NSLocationWhenInUseUsageDescription": "Mesai girisi ve cikisi icin konumunuza ihtiyacimiz var.",
         "NSLocationAlwaysUsageDescription": "Mesai girisi ve cikisi icin konumunuza ihtiyacimiz var.",
@@ -23,11 +23,11 @@
     },
     "android": {
       "adaptiveIcon": {
-        "foregroundImage": "./assets/logo.png",
+        "foregroundImage": "./assets/icon.png",
         "backgroundColor": "#000000"
       },
       "edgeToEdgeEnabled": true,
-      "package": "com.paxmedya.mesaitakip",
+      "package": "com.paxmedya.paxportal",
       "permissions": [
         "ACCESS_FINE_LOCATION",
         "ACCESS_COARSE_LOCATION",
@@ -35,13 +35,18 @@
         "RECEIVE_BOOT_COMPLETED",
         "VIBRATE",
         "WAKE_LOCK",
-        "SCHEDULE_EXACT_ALARM"
+        "SCHEDULE_EXACT_ALARM",
+        "android.permission.ACCESS_COARSE_LOCATION",
+        "android.permission.ACCESS_FINE_LOCATION",
+        "android.permission.CAMERA",
+        "android.permission.RECORD_AUDIO"
       ]
     },
     "web": {
-      "favicon": "./assets/logo.png"
+      "favicon": "./assets/icon.png"
     },
     "plugins": [
+      "./withGorevWidget",
       [
         "expo-location",
         {
@@ -52,8 +57,8 @@
       [
         "expo-notifications",
         {
-          "icon": "./assets/logo.png",
-          "color": "#ffd800"
+          "icon": "./assets/icon.png",
+          "color": "#000000"
         }
       ],
       [

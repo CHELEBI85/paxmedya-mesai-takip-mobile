@@ -132,16 +132,19 @@ const notificationService = {
           name: 'Varsayılan',
           importance: Notifications.AndroidImportance.HIGH,
           vibrationPattern: [0, 250, 250, 250],
+          lightColor: '#000000',
         });
         await Notifications.setNotificationChannelAsync('equipment', {
           name: 'Ekipman Hatırlatmaları',
           importance: Notifications.AndroidImportance.HIGH,
           vibrationPattern: [0, 250, 250, 250],
+          lightColor: '#000000',
         });
         await Notifications.setNotificationChannelAsync('motivation', {
-          name: 'Motivasyon',
+          name: 'Günlük Hatırlatma',
           importance: Notifications.AndroidImportance.DEFAULT,
           vibrationPattern: [0, 150],
+          lightColor: '#000000',
         });
       }
 
@@ -159,7 +162,7 @@ const notificationService = {
           title: 'Ekipman Hatırlatması',
           body: `"${itemName}" adlı ekipman ${hours} saattir üzerinizde. Teslim etmeyi unutmayın!`,
           data: { type: 'equipment_reminder', itemName },
-          ...(Platform.OS === 'android' && { channelId: 'equipment' }),
+          ...(Platform.OS === 'android' && { channelId: 'equipment', color: '#000000' }),
         },
         trigger: {
           type: Notifications.SchedulableTriggerInputTypes.TIME_INTERVAL,
@@ -199,6 +202,7 @@ const notificationService = {
             title: r.title,
             body: r.body,
             data: { type: 'work_reminder' },
+            ...(Platform.OS === 'android' && { color: '#000000' }),
           },
           trigger: {
             type: Notifications.SchedulableTriggerInputTypes.TIME_INTERVAL,
@@ -246,7 +250,8 @@ const notificationService = {
         await AsyncStorage.removeItem(MOTIVATION_IDS_KEY);
       }
 
-      for (let h = hour + 1; h <= 23; h++) {
+      const baslangicSaat = Math.max(hour + 1, 9);
+      for (let h = baslangicSaat; h <= 18; h++) {
         const at = new Date(now);
         at.setHours(h, 0, 0, 0);
         const seconds = Math.floor((at - now) / 1000);
@@ -254,10 +259,9 @@ const notificationService = {
         const msg = MOTIVATION_MESSAGES[Math.floor(Math.random() * MOTIVATION_MESSAGES.length)];
         const id = await Notifications.scheduleNotificationAsync({
           content: {
-            title: 'Motivasyon',
             body: msg,
             data: { type: 'motivation' },
-            ...(Platform.OS === 'android' && { channelId: 'motivation' }),
+            ...(Platform.OS === 'android' && { channelId: 'motivation', color: '#000000' }),
           },
           trigger: {
             type: Notifications.SchedulableTriggerInputTypes.TIME_INTERVAL,

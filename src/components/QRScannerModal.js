@@ -69,7 +69,7 @@ export default function QRScannerModal({ visible, item, mode, onSuccess, onCance
   };
 
   const modeLabel = mode === 'al' ? 'Teslim Al' : 'Teslim Et';
-  const modeColor = mode === 'al' ? '#10b981' : '#ef4444';
+  const modeColor = mode === 'al' ? '#ffd800' : '#ef4444';
 
   if (!visible) return null;
 

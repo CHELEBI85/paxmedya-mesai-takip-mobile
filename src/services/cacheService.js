@@ -35,6 +35,19 @@ const cacheService = {
     return result?.data ?? null;
   },
 
+  /** Mevcut cache içeriğini yerinde günceller, timestamp korunur (TTL sıfırlanmaz). */
+  async patch(key, updater) {
+    try {
+      const raw = await AsyncStorage.getItem(key);
+      if (!raw) return;
+      const entry = JSON.parse(raw);
+      const newData = updater(entry.data);
+      await AsyncStorage.setItem(key, JSON.stringify({ data: newData, timestamp: entry.timestamp }));
+    } catch (e) {
+      if (__DEV__) console.warn('Cache patch error:', e);
+    }
+  },
+
   async remove(key) {
     try {
       await AsyncStorage.removeItem(key);

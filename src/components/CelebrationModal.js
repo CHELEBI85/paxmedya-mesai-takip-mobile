@@ -464,12 +464,12 @@ export default function CelebrationModal({ visible, type, userName, userId, onCl
         Animated.timing(glowAnim, {
           toValue: 1,
           duration: 1200,
-          useNativeDriver: false,
+          useNativeDriver: true,
         }),
         Animated.timing(glowAnim, {
           toValue: 0,
           duration: 1200,
-          useNativeDriver: false,
+          useNativeDriver: true,
         }),
       ])
     ).start();
@@ -580,19 +580,9 @@ export default function CelebrationModal({ visible, type, userName, userId, onCl
     });
   };
 
-  const glowColor = isCheckIn
-    ? glowAnim.interpolate({
-        inputRange: [0, 1],
-        outputRange: ['rgba(16, 185, 129, 0.3)', 'rgba(16, 185, 129, 0.8)'],
-      })
-    : glowAnim.interpolate({
-        inputRange: [0, 1],
-        outputRange: ['rgba(168, 85, 247, 0.3)', 'rgba(168, 85, 247, 0.8)'],
-      });
-
-  const glowShadowRadius = glowAnim.interpolate({
+  const glowOpacity = glowAnim.interpolate({
     inputRange: [0, 1],
-    outputRange: [8, 20],
+    outputRange: [0.3, 1],
   });
 
   const shimmerOpacity = titleShimmer.interpolate({
@@ -690,9 +680,9 @@ export default function CelebrationModal({ visible, type, userName, userId, onCl
                 style={[
                   styles.modalContainer,
                   {
-                    borderColor: glowColor,
+                    borderColor: isCheckIn ? '#10b981' : '#a855f7',
                     shadowColor: isCheckIn ? '#10b981' : '#a855f7',
-                    shadowRadius: glowShadowRadius,
+                    opacity: glowOpacity,
                   },
                 ]}
               >

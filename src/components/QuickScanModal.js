@@ -31,7 +31,7 @@ const TURLER_MAP = {
 
 export default function QuickScanModal({
   visible, items, currentUser, userProfile,
-  processingId, onTeslimAl, onTeslimEt, onClose,
+  processingId, onTeslimAl, onTeslimEt, onClose, onFetchItem,
 }) {
   const [permission, requestPermission] = useCameraPermissions();
   const [phase, setPhase] = useState('scan');
@@ -130,10 +130,24 @@ export default function QuickScanModal({
     pulseAnim.setValue(1);
   };
 
-  const handleBarCodeScanned = ({ data }) => {
+  const handleBarCodeScanned = async ({ data }) => {
     if (scanLock.current) return;
     scanLock.current = true;
-    const item = items.find((i) => i.id === data || i._docId === data);
+
+    console.log('[QuickScan] Okunan QR data:', data);
+    console.log('[QuickScan] Cache item sayısı:', items?.length);
+
+    // 1) Önce yüklü cache'de ara
+    let item = items?.find((i) => i.id === data || i._docId === data) ?? null;
+    console.log('[QuickScan] Cache sonucu:', item ? `${item.ad}` : 'YOK');
+
+    // 2) Cache'de yoksa doğrudan Firestore'dan çek
+    if (!item && onFetchItem) {
+      setPhase('loading');
+      item = await onFetchItem(data);
+      console.log('[QuickScan] Firestore sonucu:', item ? `${item.ad}` : 'YOK');
+    }
+
     if (item) {
       setFoundItem(item);
       setPhase('found');
@@ -515,6 +529,7 @@ const s = StyleSheet.create({
     borderTopLeftRadius: 24, borderTopRightRadius: 24,
     borderTopWidth: 1, borderTopColor: '#334155',
     paddingHorizontal: 20, paddingTop: 20, paddingBottom: 34,
+    marginBottom: 26,
     gap: 14,
   },
 

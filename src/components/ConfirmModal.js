@@ -37,6 +37,10 @@ export default function ConfirmModal({
   hideCancel = false,
   onConfirm,
   onCancel,
+  onBackdropPress,
+  secondaryText,
+  secondaryColor = '#8b5cf6',
+  onSecondary,
 }) {
   const scaleAnim = useRef(new Animated.Value(0.85)).current;
   const opacityAnim = useRef(new Animated.Value(0)).current;
@@ -66,7 +70,7 @@ export default function ConfirmModal({
 
   return (
     <Modal transparent visible={visible} animationType="none" statusBarTranslucent>
-      <TouchableWithoutFeedback onPress={onCancel}>
+      <TouchableWithoutFeedback onPress={onBackdropPress ?? onCancel}>
         <Animated.View style={[styles.overlay, { opacity: opacityAnim }]}>
           <TouchableWithoutFeedback>
             <Animated.View style={[styles.box, { transform: [{ scale: scaleAnim }], opacity: opacityAnim }]}>
@@ -84,13 +88,7 @@ export default function ConfirmModal({
               {message ? <Text style={styles.message}>{message}</Text> : null}
 
               {/* Butonlar */}
-              <View style={styles.btnRow}>
-                {!hideCancel && (
-                  <TouchableOpacity style={styles.cancelBtn} onPress={onCancel} activeOpacity={0.75}>
-                    <Text style={styles.cancelBtnTxt}>{cancelText}</Text>
-                  </TouchableOpacity>
-                )}
-
+              <View style={styles.btnCol}>
                 <TouchableOpacity
                   style={[styles.confirmBtn, destructive ? styles.confirmBtnRed : styles.confirmBtnYellow]}
                   onPress={onConfirm}
@@ -100,6 +98,22 @@ export default function ConfirmModal({
                     {confirmText}
                   </Text>
                 </TouchableOpacity>
+
+                {secondaryText && (
+                  <TouchableOpacity
+                    style={[styles.secondaryBtn, { borderColor: secondaryColor + '55' }]}
+                    onPress={onSecondary}
+                    activeOpacity={0.75}
+                  >
+                    <Text style={[styles.secondaryBtnTxt, { color: secondaryColor }]}>{secondaryText}</Text>
+                  </TouchableOpacity>
+                )}
+
+                {!hideCancel && (
+                  <TouchableOpacity style={styles.cancelBtn} onPress={onCancel} activeOpacity={0.75}>
+                    <Text style={styles.cancelBtnTxt}>{cancelText}</Text>
+                  </TouchableOpacity>
+                )}
               </View>
             </Animated.View>
           </TouchableWithoutFeedback>
@@ -154,30 +168,36 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     lineHeight: 21,
   },
-  btnRow: {
-    flexDirection: 'row',
-    gap: 10,
-    marginTop: 8,
+  btnCol: {
     width: '100%',
+    gap: 8,
+    marginTop: 8,
   },
   cancelBtn: {
-    flex: 1,
+    paddingVertical: 12,
+    borderRadius: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  cancelBtnTxt: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#475569',
+  },
+  secondaryBtn: {
     paddingVertical: 12,
     borderRadius: 12,
     alignItems: 'center',
     justifyContent: 'center',
     backgroundColor: '#0f172a',
     borderWidth: 1,
-    borderColor: '#334155',
   },
-  cancelBtnTxt: {
+  secondaryBtnTxt: {
     fontSize: 15,
-    fontWeight: '600',
-    color: '#94a3b8',
+    fontWeight: '700',
   },
   confirmBtn: {
-    flex: 1,
-    paddingVertical: 12,
+    paddingVertical: 14,
     borderRadius: 12,
     alignItems: 'center',
     justifyContent: 'center',
