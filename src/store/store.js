@@ -18,16 +18,13 @@ export const store = configureStore({
       serializableCheck: {
         ignoredActions: [
           'auth/loginUser/fulfilled',
-          'auth/registerUser/fulfilled',
           'database/updateUserProfile/fulfilled',
           'database/getUserProfile/fulfilled',
           'database/addWorkRecord/fulfilled',
-          'database/fetchWorkRecords/fulfilled',
           'database/fetchWorkRecordsFirstPage/fulfilled',
           'database/fetchWorkRecordsNextPage/fulfilled',
           'database/updateWorkRecord/fulfilled',
           'database/deleteWorkRecord/fulfilled',
-          'envanter/fetchItems/fulfilled',
           'envanter/fetchItemsFirstPage/fulfilled',
           'envanter/fetchItemsNextPage/fulfilled',
           'envanter/fetchHareketler/fulfilled',

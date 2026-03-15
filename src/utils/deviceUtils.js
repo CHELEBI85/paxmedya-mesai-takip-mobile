@@ -51,13 +51,3 @@ export const getDeviceName = async () => {
   }
 };
 
-// Cihaz ID'sini temizle (logout için)
-export const clearDeviceId = async () => {
-  try {
-    await AsyncStorage.removeItem(DEVICE_ID_KEY);
-  } catch (error) {
-    if (__DEV__) {
-      console.error('Cihaz ID temizlenemedi:', error);
-    }
-  }
-};

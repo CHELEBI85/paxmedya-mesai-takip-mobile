@@ -128,24 +128,6 @@ export const fetchEnvanterItemsNextPage = createAsyncThunk(
   }
 );
 
-/** Tüm envanter (önceki davranış; gerekirse kullan). */
-export const fetchEnvanterItems = createAsyncThunk(
-  'envanter/fetchItems',
-  async (_, { rejectWithValue }) => {
-    try {
-      const snapshot = await getDocs(collection(db, 'envanterItems'));
-      const items = snapshot.docs.map(mapEnvanterDoc);
-
-      await cacheService.set(CACHE_KEYS.ENVANTER_ITEMS, items);
-      return items;
-    } catch (error) {
-      const cached = await cacheService.getAny(CACHE_KEYS.ENVANTER_ITEMS);
-      if (cached) return cached;
-      return rejectWithValue(error.message);
-    }
-  }
-);
-
 export const fetchEnvanterCounts = createAsyncThunk(
   'envanter/fetchCounts',
   async ({ forceRefresh = false } = {}, { rejectWithValue }) => {
@@ -439,22 +421,6 @@ const envanterSlice = createSlice({
       })
       .addCase(fetchEnvanterItemsNextPage.rejected, (state, action) => {
         state.loadingMore = false;
-        state.error = action.payload;
-      });
-
-    builder
-      .addCase(fetchEnvanterItems.pending, (state) => {
-        state.loading = true;
-        state.error = null;
-      })
-      .addCase(fetchEnvanterItems.fulfilled, (state, action) => {
-        state.loading = false;
-        state.items = action.payload;
-        state.itemsCursor = null;
-        state.itemsHasMore = false;
-      })
-      .addCase(fetchEnvanterItems.rejected, (state, action) => {
-        state.loading = false;
         state.error = action.payload;
       });
 

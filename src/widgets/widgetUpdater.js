@@ -2,7 +2,7 @@ import React from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { requestWidgetUpdate } from 'react-native-android-widget';
 import { GorevWidget } from './GorevWidget';
-import { WIDGET_GOREV_KEY } from './widgetTaskHandler';
+import { WIDGET_GOREV_KEY, WIDGET_USER_KEY } from './widgetTaskHandler';
 
 function buHaftaAraligi() {
   const bugun = new Date();
@@ -15,23 +15,34 @@ function buHaftaAraligi() {
   return { baslangic: fmt(haftaBasi), bitis: fmt(haftaSonu) };
 }
 
-export async function widgetGuncelle(gorevler = []) {
+/**
+ * Widget'ı günceller ve arka plan fetcher için uid/role'ü AsyncStorage'a kaydeder.
+ * @param {Array}  gorevler - Tüm görevler listesi
+ * @param {string} uid      - Giriş yapan kullanıcının UID'i
+ * @param {string} role     - Kullanıcı rolü ('admin' | 'manager' | 'user')
+ */
+export async function widgetGuncelle(gorevler = [], uid = null, role = null) {
   try {
     const { baslangic, bitis } = buHaftaAraligi();
     const haftaGorevleri = gorevler.filter(
       g => g.baslangic >= baslangic && g.baslangic <= bitis
     );
 
-    // 1. AsyncStorage'ı güncelle (widget task handler okur)
+    // uid/role'ü kaydet — widgetTaskHandler arka planda Firestore'a bağlanmak için kullanır
+    if (uid || role) {
+      await AsyncStorage.setItem(WIDGET_USER_KEY, JSON.stringify({ uid, role }));
+    }
+
+    // AsyncStorage'ı güncelle (widget task handler okur)
     await AsyncStorage.setItem(WIDGET_GOREV_KEY, JSON.stringify(haftaGorevleri));
 
-    // 2. Widget'ı anlık yeniden render et
+    // Widget'ı anlık yeniden render et
     await requestWidgetUpdate({
       widgetName: 'GorevWidget',
       renderWidget: () => <GorevWidget gorevler={haftaGorevleri} />,
       widgetNotFound: () => {},
     });
-  } catch (e) {
+  } catch {
     // Widget eklenmemişse veya hata varsa sessizce geç
   }
 }

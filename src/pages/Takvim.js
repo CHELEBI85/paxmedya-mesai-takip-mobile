@@ -795,7 +795,8 @@ export default function Takvim() {
   const userProfile = useSelector(s => s.database.userProfile);
   const {
     gorevler, kullanicilar, loading, kullanicilarLoading,
-    getGorevler, getKullanicilar, gorevEkle, gorevGuncelle, gorevSil, gorevTamamla,
+    getGorevler, getGorevlerIfNeeded, getKullanicilar, getKullanicilarIfNeeded,
+    gorevEkle, gorevGuncelle, gorevSil, gorevTamamla,
   } = useTakvim();
 
   const role = userProfile?.role;
@@ -820,8 +821,8 @@ export default function Takvim() {
 
   useEffect(() => {
     if (!user?.uid) return;
-    getGorevler(user.uid, role);
-    if (isAdmin) getKullanicilar();
+    getGorevlerIfNeeded(user.uid, role);
+    if (isAdmin) getKullanicilarIfNeeded();
   }, [user?.uid, role]);
 
   const onRefresh = useCallback(async () => {

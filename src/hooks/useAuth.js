@@ -1,5 +1,5 @@
 import { useDispatch, useSelector } from 'react-redux';
-import { loginUser, registerUser, logoutUser } from '../store/slices/authSlice';
+import { loginUser, logoutUser } from '../store/slices/authSlice';
 import { useEffect, useState } from 'react';
 import { onAuthStateChanged } from 'firebase/auth';
 import { auth } from '../config/firebase';
@@ -9,7 +9,7 @@ export const useAuth = () => {
   const { user, loading, error, isAuthenticated } = useSelector((state) => state.auth);
   const [firebaseUser, setFirebaseUser] = useState(null);
 
-  // Sincronizar com Firebase Auth
+  // Firebase Auth ile senkronize et
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, (fbUser) => {
       setFirebaseUser(fbUser);
@@ -22,21 +22,16 @@ export const useAuth = () => {
     return dispatch(loginUser({ email, password }));
   };
 
-  const register = async (email, password, profileData = {}) => {
-    return dispatch(registerUser({ email, password, profileData }));
-  };
-
   const logout = async () => {
     return dispatch(logoutUser());
   };
 
   return {
-    user: firebaseUser || user, // Usar Firebase user primeiro, depois Redux
+    user: firebaseUser || user, // Önce Firebase user'ı kullan, sonra Redux
     loading,
     error,
     isAuthenticated: !!firebaseUser || isAuthenticated,
     login,
-    register,
     logout,
   };
 };

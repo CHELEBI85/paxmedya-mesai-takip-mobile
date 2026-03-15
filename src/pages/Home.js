@@ -7,7 +7,6 @@ import {
   ActivityIndicator,
   ScrollView,
   RefreshControl,
-  Image,
   InteractionManager,
 } from 'react-native';
 import { MaterialIcons } from '@expo/vector-icons';
@@ -43,7 +42,7 @@ export default function Home() {
   const { items, getItemsFirstPageIfNeeded, handleTeslimAl, handleTeslimEt, getItemByQRData } = useEnvanter();
 
   const { coords: location, isInZone, loading: locationLoading, error: locationError, refreshLocation } = useLocation();
-  const { gorevler, getGorevler } = useTakvim();
+  const { gorevler, loading: gorevlerLoading, getGorevler, getGorevlerIfNeeded } = useTakvim();
   const role = userProfile?.role;
   // Ref ile location'ı takip ediyoruz — GPS her 10sn güncellense bile callback'ler yeniden oluşturulmuyor
   const locationRef = useRef(location);
@@ -75,11 +74,15 @@ export default function Home() {
   const onRefresh = useCallback(async () => {
     setRefreshing(true);
     try {
-      if (user?.uid) await Promise.all([getProfile(user.uid), getWorkRecordsFirstPage(user.uid)]);
+      if (user?.uid) await Promise.all([
+        getProfile(user.uid),
+        getWorkRecordsFirstPage(user.uid),
+        getGorevler(user.uid, role),
+      ]);
     } finally {
       setRefreshing(false);
     }
-  }, [user, getProfile, getWorkRecordsFirstPage]);
+  }, [user, role, getProfile, getWorkRecordsFirstPage, getGorevler]);
 
   const handleRefreshLocation = useCallback(async () => {
     setLocationRefreshing(true);
@@ -103,7 +106,7 @@ export default function Home() {
   }, [quickScan, getItemsFirstPageIfNeeded]);
 
   useEffect(() => {
-    if (user?.uid && gorevler.length === 0) getGorevler(user.uid, role);
+    if (user?.uid) getGorevlerIfNeeded(user.uid, role);
   }, [user?.uid, role]);
 
   useEffect(() => {
@@ -124,7 +127,7 @@ export default function Home() {
           checkOutTime: co.toISOString(),
           checkOutLocation: yesterdayRecord.checkInLocation || null,
           autoCheckOut: true,
-        }).then(() => getWorkRecordsFirstPageIfNeeded(user.uid)).catch(() => {});
+        }, user.uid).then(() => getWorkRecordsFirstPageIfNeeded(user.uid)).catch(() => {});
       }
 
       const todayRecord = userRecords.find(r => r.date === today);
@@ -210,7 +213,7 @@ export default function Home() {
               onConfirm: async () => {
                 hideModal();
                 const co = new Date(yesterday); co.setHours(18, 30, 0, 0);
-                await updateRecord(yesterdayRecord.id, { checkOutTime: co.toISOString(), autoCheckOut: true });
+                await updateRecord(yesterdayRecord.id, { checkOutTime: co.toISOString(), autoCheckOut: true }, user?.uid);
                 await getWorkRecordsFirstPageIfNeeded(user.uid);
                 performCheckIn('normal');
               },
@@ -241,7 +244,7 @@ export default function Home() {
           const loc = locationRef.current;
           const updateData = { checkOutTime: now.toISOString() };
           if (loc) updateData.checkOutLocation = { latitude: loc.latitude, longitude: loc.longitude };
-          await updateRecord(recordId, updateData);
+          await updateRecord(recordId, updateData, user?.uid);
           setCheckOutTime(now);
           setCheckInStatus('checked-out');
           setCelebrationType('check-out');
@@ -289,78 +292,92 @@ export default function Home() {
       contentContainerStyle={{ paddingBottom: 32 }}
       refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#ffffff" />}
     >
-      <View style={s.header}>
-        <Image source={require('../../assets/Pax_Portal_Saydam.png')} style={s.logo} resizeMode="contain" />
-      </View>
       <View style={s.mainContent}>
 
         {/* ── Bu Haftaki Görevler (EN ÜSTTE) ── */}
-        {buHaftaGorevleri.length > 0 && (
-          <View style={s.gorevKart}>
-            <View style={s.gorevKartBaslik}>
-              <View style={s.gorevKartBaslikSol}>
-                <View style={s.gorevKartIkon}>
-                  <MaterialIcons name="calendar-today" size={15} color="#ffd800" />
-                </View>
-                <View>
-                  <Text style={s.gorevKartBaslikTxt}>Bu Haftaki Görevler</Text>
-                  <Text style={s.gorevKartAltTxt}>{buHaftaGorevleri.filter(g => g.tamamlandi).length}/{buHaftaGorevleri.length} tamamlandı</Text>
-                </View>
+        <View style={s.gorevKart}>
+          <View style={s.gorevKartBaslik}>
+            <View style={s.gorevKartBaslikSol}>
+              <View style={s.gorevKartIkon}>
+                <MaterialIcons name="calendar-today" size={15} color="#ffd800" />
               </View>
+              <View>
+                <Text style={s.gorevKartBaslikTxt}>Bu Haftaki Görevler</Text>
+                {!gorevlerLoading && (
+                  <Text style={s.gorevKartAltTxt}>
+                    {buHaftaGorevleri.length === 0
+                      ? 'Bu hafta görev yok'
+                      : `${buHaftaGorevleri.filter(g => g.tamamlandi).length}/${buHaftaGorevleri.length} tamamlandı`}
+                  </Text>
+                )}
+              </View>
+            </View>
+            {!gorevlerLoading && buHaftaGorevleri.length > 0 && (
               <View style={s.gorevSayiBadge}>
                 <Text style={s.gorevSayiTxt}>{buHaftaGorevleri.length}</Text>
               </View>
-            </View>
-
-            {/* Progress bar */}
-            <View style={s.gorevProgressWrap}>
-              <View style={[s.gorevProgressBar, {
-                width: buHaftaGorevleri.length > 0
-                  ? `${(buHaftaGorevleri.filter(g => g.tamamlandi).length / buHaftaGorevleri.length) * 100}%`
-                  : '0%'
-              }]} />
-            </View>
-
-            {buHaftaGorevleri.slice(0, 4).map(g => {
-              const renk = g.tamamlandi ? '#10b981' : projeRenkH(g.proje);
-              return (
-                <View key={g.id} style={[s.gorevSatir, g.tamamlandi && { opacity: 0.55 }]}>
-                  <View style={[s.gorevSerit, { backgroundColor: renk }]} />
-                  <View style={s.gorevSatirIcerik}>
-                    <View style={s.gorevSatirUst}>
-                      <View style={[s.gorevProjeBadge, { backgroundColor: renk + '18' }]}>
-                        <Text style={[s.gorevProje, { color: renk }]} numberOfLines={1}>{g.proje}</Text>
-                      </View>
-                      {g.tamamlandi
-                        ? <MaterialIcons name="check-circle" size={14} color="#10b981" />
-                        : <Text style={s.gorevTarih}>{fmtGunAyH(g.teslim)}</Text>}
-                    </View>
-                    <Text style={[s.gorevIs, g.tamamlandi && { textDecorationLine: 'line-through' }]} numberOfLines={1}>{g.is}</Text>
-                    {g.sorumlular?.length > 0 && (
-                      <View style={s.gorevSorumluRow}>
-                        {g.sorumlular.slice(0, 3).map(sr => (
-                          <View key={sr.uid} style={[s.gorevSorumluChip, { backgroundColor: projeRenkH(sr.displayName) + '18' }]}>
-                            <Text style={[s.gorevSorumluTxt, { color: projeRenkH(sr.displayName) }]}>
-                              {(sr.displayName || '').split(' ')[0]}
-                            </Text>
-                          </View>
-                        ))}
-                        {g.sorumlular.length > 3 && <Text style={s.gorevSorumluFazla}>+{g.sorumlular.length - 3}</Text>}
-                      </View>
-                    )}
-                  </View>
-                </View>
-              );
-            })}
-
-            {buHaftaGorevleri.length > 4 && (
-              <View style={s.gorevFazlaRow}>
-                <MaterialIcons name="more-horiz" size={14} color="#444444" />
-                <Text style={s.gorevFazla}>{buHaftaGorevleri.length - 4} görev daha</Text>
-              </View>
             )}
           </View>
-        )}
+
+          {gorevlerLoading ? (
+            <View style={s.gorevYukleniyor}>
+              <ActivityIndicator size="small" color="#ffd800" />
+            </View>
+          ) : buHaftaGorevleri.length === 0 ? (
+            <View style={s.gorevBos}>
+              <MaterialIcons name="event-available" size={22} color="#333333" />
+              <Text style={s.gorevBosTxt}>Bu hafta için görev atanmadı</Text>
+            </View>
+          ) : (
+            <>
+              {/* Progress bar */}
+              <View style={s.gorevProgressWrap}>
+                <View style={[s.gorevProgressBar, {
+                  width: `${(buHaftaGorevleri.filter(g => g.tamamlandi).length / buHaftaGorevleri.length) * 100}%`
+                }]} />
+              </View>
+
+              {buHaftaGorevleri.slice(0, 4).map(g => {
+                const renk = g.tamamlandi ? '#10b981' : projeRenkH(g.proje);
+                return (
+                  <View key={g.id} style={[s.gorevSatir, g.tamamlandi && { opacity: 0.55 }]}>
+                    <View style={[s.gorevSerit, { backgroundColor: renk }]} />
+                    <View style={s.gorevSatirIcerik}>
+                      <View style={s.gorevSatirUst}>
+                        <View style={[s.gorevProjeBadge, { backgroundColor: renk + '18' }]}>
+                          <Text style={[s.gorevProje, { color: renk }]} numberOfLines={1}>{g.proje}</Text>
+                        </View>
+                        {g.tamamlandi
+                          ? <MaterialIcons name="check-circle" size={14} color="#10b981" />
+                          : <Text style={s.gorevTarih}>{fmtGunAyH(g.teslim)}</Text>}
+                      </View>
+                      <Text style={[s.gorevIs, g.tamamlandi && { textDecorationLine: 'line-through' }]} numberOfLines={1}>{g.is}</Text>
+                      {g.sorumlular?.length > 0 && (
+                        <View style={s.gorevSorumluRow}>
+                          {g.sorumlular.slice(0, 3).map(sr => (
+                            <View key={sr.uid} style={[s.gorevSorumluChip, { backgroundColor: projeRenkH(sr.displayName) + '18' }]}>
+                              <Text style={[s.gorevSorumluTxt, { color: projeRenkH(sr.displayName) }]}>
+                                {(sr.displayName || '').split(' ')[0]}
+                              </Text>
+                            </View>
+                          ))}
+                          {g.sorumlular.length > 3 && <Text style={s.gorevSorumluFazla}>+{g.sorumlular.length - 3}</Text>}
+                        </View>
+                      )}
+                    </View>
+                  </View>
+                );
+              })}
+
+              {buHaftaGorevleri.length > 4 && (
+                <View style={s.gorevFazlaRow}>
+                  <MaterialIcons name="more-horiz" size={14} color="#444444" />
+                  <Text style={s.gorevFazla}>{buHaftaGorevleri.length - 4} görev daha</Text>
+                </View>
+              )}
+            </>
+          )}
+        </View>
 
         <View style={s.mesaiKart}>
           <View style={s.mesaiBaslikRow}>
@@ -497,12 +514,6 @@ const s = StyleSheet.create({
   centerTxt: { fontSize: 14, color: '#555555' },
   errTitle: { fontSize: 18, fontWeight: '700', color: '#ff4444', marginTop: 8 },
   errMsg: { fontSize: 13, color: '#555555', textAlign: 'center', paddingHorizontal: 32, marginTop: 4 },
-  header: {
-    flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
-    backgroundColor: '#111111', paddingHorizontal: 16, paddingTop: 14, paddingBottom: 14,
-    borderBottomWidth: 1, borderBottomColor: '#1e1e1e',
-  },
-  logo: { width: 220, height: 50 },
   mainContent: {
     paddingHorizontal: 14, paddingTop: 14, paddingBottom: 4, gap: 12,
   },
@@ -551,6 +562,9 @@ const s = StyleSheet.create({
     paddingVertical: 10, borderTopWidth: 1, borderTopColor: '#1a1a1a',
   },
   gorevFazla: { fontSize: 12, color: '#444444' },
+  gorevYukleniyor: { alignItems: 'center', justifyContent: 'center', paddingVertical: 20 },
+  gorevBos: { alignItems: 'center', justifyContent: 'center', gap: 6, paddingVertical: 20 },
+  gorevBosTxt: { fontSize: 12, color: '#444444' },
   konumOkKutu: {
     width: 32, height: 32, borderRadius: 16,
     alignItems: 'center', justifyContent: 'center', marginRight: 14,

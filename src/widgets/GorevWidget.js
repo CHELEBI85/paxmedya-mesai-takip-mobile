@@ -1,15 +1,18 @@
 import React from 'react';
 import { FlexWidget, TextWidget } from 'react-native-android-widget';
 
-const AYLAR = ['Oca','Şub','Mar','Nis','May','Haz','Tem','Ağu','Eyl','Eki','Kas','Ara'];
-const GUNLER = ['Paz','Pzt','Sal','Çar','Per','Cum','Cmt'];
+const AYLAR = ['Oca', 'Şub', 'Mar', 'Nis', 'May', 'Haz', 'Tem', 'Ağu', 'Eyl', 'Eki', 'Kas', 'Ara'];
+const GUNLER = ['Paz', 'Pzt', 'Sal', 'Çar', 'Per', 'Cum', 'Cmt'];
 
+const RENKLER = ['#6366f1', '#f59e0b', '#10b981', '#ef4444', '#3b82f6', '#8b5cf6', '#ec4899', '#14b8a6'];
 const projeRenk = (proje = '') => {
-  const renkler = ['#6366f1','#f59e0b','#10b981','#ef4444','#3b82f6','#8b5cf6','#ec4899','#14b8a6'];
   let hash = 0;
   for (let i = 0; i < proje.length; i++) hash = proje.charCodeAt(i) + ((hash << 5) - hash);
-  return renkler[Math.abs(hash) % renkler.length];
+  return RENKLER[Math.abs(hash) % RENKLER.length];
 };
+
+// Tarih formatı: "15/03" gibi
+const fmtTarih = (dateStr) => (dateStr ? dateStr.slice(5).replace('-', '/') : '');
 
 function GorevSatir({ gorev }) {
   const renk = projeRenk(gorev.proje);
@@ -19,24 +22,56 @@ function GorevSatir({ gorev }) {
         width: '100%',
         flexDirection: 'row',
         alignItems: 'center',
-        backgroundColor: '#1f1f1f',
-        borderRadius: 6,
-        paddingHorizontal: 8,
-        paddingVertical: 5,
-        marginBottom: 4,
+        backgroundColor: '#181818',
+        borderRadius: 10,
+        marginBottom: 5,
+        paddingVertical: 7,
+        paddingRight: 10,
       }}
     >
-      <FlexWidget style={{ width: 4, height: '100%', minHeight: 14, backgroundColor: renk, borderRadius: 2, marginRight: 8 }} />
-      <TextWidget
-        style={{ flex: 1, fontSize: 11, color: '#e0e0e0', fontWeight: '600' }}
-        text={gorev.is || 'Görev'}
-        maxLines={1}
+      {/* Sol renk çubuğu */}
+      <FlexWidget
+        style={{
+          width: 3,
+          height: 28,
+          backgroundColor: renk,
+          borderRadius: 2,
+          marginLeft: 8,
+          marginRight: 9,
+        }}
       />
-      <TextWidget
-        style={{ fontSize: 9, color: renk, fontWeight: '700', marginLeft: 6 }}
-        text={gorev.proje || ''}
-        maxLines={1}
-      />
+
+      {/* Görev metni */}
+      <FlexWidget style={{ flex: 1, flexDirection: 'column' }}>
+        <TextWidget
+          style={{ fontSize: 11, color: '#e8e8e8', fontWeight: '700' }}
+          text={gorev.is || 'Görev'}
+          maxLines={1}
+        />
+        <TextWidget
+          style={{ fontSize: 9, color: renk, fontWeight: '600', marginTop: 1 }}
+          text={gorev.proje || ''}
+          maxLines={1}
+        />
+      </FlexWidget>
+
+      {/* Teslim tarihi */}
+      {gorev.teslim ? (
+        <FlexWidget
+          style={{
+            backgroundColor: renk + '20',
+            borderRadius: 5,
+            paddingHorizontal: 5,
+            paddingVertical: 2,
+            marginLeft: 6,
+          }}
+        >
+          <TextWidget
+            style={{ fontSize: 9, color: renk, fontWeight: '700' }}
+            text={fmtTarih(gorev.teslim)}
+          />
+        </FlexWidget>
+      ) : null}
     </FlexWidget>
   );
 }
@@ -50,78 +85,178 @@ export function GorevWidget({ gorevler = [] }) {
   const toplam = gorevler.length;
   const goruntulenecek = aktifGorevler.slice(0, 4);
   const fazla = aktifGorevler.length - 4;
+  const yuzde = toplam > 0 ? Math.round((tamamlanan / toplam) * 100) : 0;
+  const hepsiTamam = toplam > 0 && aktifGorevler.length === 0;
 
   return (
-    // Root: tam 4x2 alanı kapla
     <FlexWidget
       style={{
         width: '100%',
         height: '100%',
-        backgroundColor: '#141414',
-        padding: 10,
+        backgroundColor: '#0f0f0f',
         flexDirection: 'column',
+        padding: 12,
       }}
     >
-      {/* ── Başlık satırı ── */}
+      {/* ── Başlık ── */}
       <FlexWidget
         style={{
           width: '100%',
           flexDirection: 'row',
           alignItems: 'center',
           justifyContent: 'space-between',
-          marginBottom: 6,
+          marginBottom: 9,
         }}
       >
         <FlexWidget style={{ flexDirection: 'row', alignItems: 'center' }}>
-          <FlexWidget style={{ width: 3, height: 13, backgroundColor: '#ffd800', borderRadius: 2, marginRight: 6 }} />
-          <TextWidget
-            style={{ fontSize: 12, fontWeight: '700', color: '#ffd800' }}
-            text="Bu Hafta Görevlerim"
-          />
-        </FlexWidget>
-        <TextWidget style={{ fontSize: 10, color: '#555555' }} text={tarihStr} />
-      </FlexWidget>
-
-      {/* ── İlerleme çubuğu ── */}
-      {toplam > 0 && (
-        <FlexWidget
-          style={{ width: '100%', flexDirection: 'row', alignItems: 'center', marginBottom: 7 }}
-        >
+          {/* Sarı nokta ikonu */}
           <FlexWidget
-            style={{ flex: 1, height: 3, backgroundColor: '#2a2a2a', borderRadius: 2 }}
+            style={{
+              width: 26,
+              height: 26,
+              borderRadius: 8,
+              backgroundColor: '#ffd80018',
+              alignItems: 'center',
+              justifyContent: 'center',
+              marginRight: 8,
+            }}
           >
             <FlexWidget
               style={{
-                width: `${Math.round((tamamlanan / toplam) * 100)}%`,
-                height: 3,
-                backgroundColor: '#10b981',
-                borderRadius: 2,
+                width: 10,
+                height: 10,
+                borderRadius: 5,
+                backgroundColor: '#ffd800',
               }}
             />
           </FlexWidget>
           <TextWidget
-            style={{ fontSize: 9, color: '#555555', marginLeft: 6 }}
-            text={`${tamamlanan}/${toplam} tamamlandı`}
+            style={{ fontSize: 13, fontWeight: '700', color: '#f0f0f0' }}
+            text="Haftalık Görevler"
           />
+        </FlexWidget>
+
+        {/* Tarih badge */}
+        <FlexWidget
+          style={{
+            backgroundColor: '#1c1c1c',
+            borderRadius: 7,
+            paddingHorizontal: 8,
+            paddingVertical: 3,
+          }}
+        >
+          <TextWidget style={{ fontSize: 9, color: '#555555', fontWeight: '600' }} text={tarihStr} />
+        </FlexWidget>
+      </FlexWidget>
+
+      {/* ── İlerleme ── */}
+      {toplam > 0 && (
+        <FlexWidget style={{ width: '100%', marginBottom: 9 }}>
+          {/* Progress bar */}
+          <FlexWidget
+            style={{
+              width: '100%',
+              height: 4,
+              backgroundColor: '#1e1e1e',
+              borderRadius: 2,
+              marginBottom: 6,
+            }}
+          >
+            <FlexWidget
+              style={{
+                width: yuzde > 0 ? `${yuzde}%` : '2%',
+                height: 4,
+                backgroundColor: hepsiTamam ? '#10b981' : '#ffd800',
+                borderRadius: 2,
+              }}
+            />
+          </FlexWidget>
+
+          {/* İstatistik rozetleri */}
+          <FlexWidget style={{ flexDirection: 'row' }}>
+            <FlexWidget
+              style={{
+                backgroundColor: '#10b98118',
+                borderRadius: 6,
+                paddingHorizontal: 7,
+                paddingVertical: 3,
+                marginRight: 5,
+              }}
+            >
+              <TextWidget
+                style={{ fontSize: 9, color: '#10b981', fontWeight: '700' }}
+                text={`✓ ${tamamlanan} tamamlandı`}
+              />
+            </FlexWidget>
+            {aktifGorevler.length > 0 && (
+              <FlexWidget
+                style={{
+                  backgroundColor: '#ffd80015',
+                  borderRadius: 6,
+                  paddingHorizontal: 7,
+                  paddingVertical: 3,
+                }}
+              >
+                <TextWidget
+                  style={{ fontSize: 9, color: '#ffd800', fontWeight: '700' }}
+                  text={`${aktifGorevler.length} bekliyor`}
+                />
+              </FlexWidget>
+            )}
+          </FlexWidget>
         </FlexWidget>
       )}
 
-      {/* ── Görev listesi ── */}
+      {/* ── Görev listesi / boş durum ── */}
       {goruntulenecek.length === 0 ? (
         <FlexWidget
-          style={{ flex: 1, width: '100%', alignItems: 'center', justifyContent: 'center' }}
+          style={{
+            flex: 1,
+            width: '100%',
+            alignItems: 'center',
+            justifyContent: 'center',
+          }}
         >
-          <TextWidget style={{ fontSize: 12, color: '#10b981', fontWeight: '700' }} text="✓ Tüm görevler tamamlandı" />
-          <TextWidget style={{ fontSize: 10, color: '#444444', marginTop: 3 }} text="Bu hafta aktif görev yok" />
+          {hepsiTamam ? (
+            <FlexWidget style={{ alignItems: 'center' }}>
+              <TextWidget
+                style={{ fontSize: 20, color: '#10b981', fontWeight: '700' }}
+                text="✓"
+              />
+              <TextWidget
+                style={{ fontSize: 12, color: '#10b981', fontWeight: '700', marginTop: 4 }}
+                text="Tüm görevler tamamlandı!"
+              />
+              <TextWidget
+                style={{ fontSize: 9, color: '#2e2e2e', marginTop: 3 }}
+                text="Harika bir hafta geçirdiniz"
+              />
+            </FlexWidget>
+          ) : (
+            <FlexWidget style={{ alignItems: 'center' }}>
+              <TextWidget style={{ fontSize: 12, color: '#2e2e2e', fontWeight: '600' }} text="Bu hafta görev yok" />
+              <TextWidget style={{ fontSize: 9, color: '#222222', marginTop: 3 }} text="Yeni görev atandığında burada görünür" />
+            </FlexWidget>
+          )}
         </FlexWidget>
       ) : (
         <FlexWidget style={{ flex: 1, width: '100%', flexDirection: 'column' }}>
-          {goruntulenecek.map((g, i) => <GorevSatir key={g.id || i} gorev={g} />)}
+          {goruntulenecek.map((g, i) => (
+            <GorevSatir key={g.id || i} gorev={g} />
+          ))}
           {fazla > 0 && (
-            <TextWidget
-              style={{ fontSize: 9, color: '#444444', textAlign: 'center', marginTop: 2 }}
-              text={`+${fazla} görev daha`}
-            />
+            <FlexWidget
+              style={{
+                alignItems: 'center',
+                justifyContent: 'center',
+                paddingTop: 3,
+              }}
+            >
+              <TextWidget
+                style={{ fontSize: 9, color: '#333333', fontWeight: '600' }}
+                text={`+${fazla} görev daha`}
+              />
+            </FlexWidget>
           )}
         </FlexWidget>
       )}

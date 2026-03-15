@@ -17,6 +17,8 @@ import {
 import { MaterialIcons } from '@expo/vector-icons';
 import { collection, addDoc, doc, updateDoc, query, where, getDocs } from 'firebase/firestore';
 import { db } from '../config/firebase';
+import cacheService from '../services/cacheService';
+import { CACHE_KEYS } from '../config/appConfig';
 import { useAuth } from '../hooks/useAuth';
 import { useDatabase } from '../hooks/useDatabase';
 import { useEnvanter } from '../hooks/useEnvanter';
@@ -225,8 +227,18 @@ function TalepFormuSekmesi({ user, userProfile }) {
   const [gonderildi, setGonderildi] = useState(false);
   const [hata, setHata] = useState('');
 
-  const talepleriFetch = useCallback(async () => {
+  const talepleriFetch = useCallback(async (forceRefresh = false) => {
     if (!user?.uid) return;
+    const cacheKey = `${CACHE_KEYS.TALEPLER}_${user.uid}`;
+    // Cache'den anında göster (forceRefresh değilse)
+    if (!forceRefresh) {
+      const cached = await cacheService.getValid(cacheKey);
+      if (cached) {
+        setTalepler(cached);
+        setYukleniyor(false);
+        return;
+      }
+    }
     setYukleniyor(true);
     try {
       const q = query(
@@ -237,8 +249,12 @@ function TalepFormuSekmesi({ user, userProfile }) {
       const liste = snap.docs.map(d => ({ id: d.id, ...d.data() }));
       liste.sort((a, b) => (b.createdAt || '').localeCompare(a.createdAt || ''));
       setTalepler(liste);
+      await cacheService.set(cacheKey, liste);
     } catch (e) {
-      console.warn('Talepler yüklenemedi:', e?.message || e);
+      // Hata durumunda süresi dolmuş da olsa cache'i göster
+      const cached = await cacheService.getAny(cacheKey);
+      if (cached) setTalepler(cached);
+      if (__DEV__) console.warn('Talepler yüklenemedi:', e?.message || e);
     } finally {
       setYukleniyor(false);
     }
@@ -360,7 +376,7 @@ function TalepFormuSekmesi({ user, userProfile }) {
     setGonderildi(false); setHata(''); setAdim(1); setAcikCal(null);
     setSecilenTalep(null); setDuzenlenenId(null);
     setGorununum('liste');
-    talepleriFetch();
+    talepleriFetch(true); // Yeni/güncellenen talep cache'e yansısın
   };
 
   // ── Liste görünümü ──
@@ -404,7 +420,7 @@ function TalepFormuSekmesi({ user, userProfile }) {
             )}
             contentContainerStyle={{ padding: 16, paddingBottom: 40 }}
             showsVerticalScrollIndicator={false}
-            onRefresh={talepleriFetch}
+            onRefresh={() => talepleriFetch(true)}
             refreshing={yukleniyor}
           />
         )}

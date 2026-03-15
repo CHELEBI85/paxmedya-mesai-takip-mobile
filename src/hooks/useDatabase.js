@@ -1,7 +1,6 @@
 import { useDispatch, useSelector } from 'react-redux';
 import { useCallback } from 'react';
 import {
-  fetchWorkRecords,
   fetchWorkRecordsFirstPage,
   fetchWorkRecordsNextPage,
   addWorkRecord,
@@ -25,11 +24,6 @@ export const useDatabase = () => {
     recordsHasMore,
     lastWorkRecordsFetchAt,
   } = useSelector((state) => state.database);
-
-  const getWorkRecords = useCallback(
-    (userId) => dispatch(fetchWorkRecords({ userId })),
-    [dispatch]
-  );
 
   // Pull-to-refresh → her zaman Firestore'dan çek, cache'i güncelle
   const getWorkRecordsFirstPage = useCallback(
@@ -74,8 +68,9 @@ export const useDatabase = () => {
     [dispatch]
   );
 
+  // userId opsiyonel — verilirse cache yerinde güncellenir
   const updateRecord = useCallback(
-    (recordId, data) => dispatch(updateWorkRecord({ recordId, data })),
+    (recordId, data, userId) => dispatch(updateWorkRecord({ recordId, data, userId })),
     [dispatch]
   );
 
@@ -93,7 +88,6 @@ export const useDatabase = () => {
     error,
     recordsCursor,
     recordsHasMore,
-    getWorkRecords,
     getWorkRecordsFirstPage,
     getWorkRecordsFirstPageIfNeeded,
     getWorkRecordsNextPage,

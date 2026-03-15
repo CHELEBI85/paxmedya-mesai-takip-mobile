@@ -146,6 +146,12 @@ const notificationService = {
           vibrationPattern: [0, 150],
           lightColor: '#000000',
         });
+        await Notifications.setNotificationChannelAsync('gorevler', {
+          name: 'Görev Bildirimleri',
+          importance: Notifications.AndroidImportance.HIGH,
+          vibrationPattern: [0, 250, 250, 250],
+          lightColor: '#000000',
+        });
       }
 
       return true;
@@ -275,6 +281,22 @@ const notificationService = {
     } catch (e) {
       if (__DEV__) console.warn('Schedule weekday motivation error:', e);
       return [];
+    }
+  },
+
+  async notifyYeniGorev(gorevAdi) {
+    try {
+      await Notifications.scheduleNotificationAsync({
+        content: {
+          title: 'Yeni görev atandı',
+          body: gorevAdi ? `"${gorevAdi}" görevi size atandı.` : 'Bu haftaki görev listeniz güncellendi.',
+          data: { type: 'new_task' },
+          ...(Platform.OS === 'android' && { channelId: 'gorevler' }),
+        },
+        trigger: null,
+      });
+    } catch (e) {
+      if (__DEV__) console.warn('notifyYeniGorev error:', e);
     }
   },
 

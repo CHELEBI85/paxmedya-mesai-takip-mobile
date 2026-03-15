@@ -2,7 +2,6 @@ import { useDispatch, useSelector } from 'react-redux';
 import { useCallback, useMemo } from 'react';
 import { useAuth } from './useAuth';
 import {
-  fetchEnvanterItems,
   fetchEnvanterItemsFirstPage,
   fetchEnvanterItemsNextPage,
   fetchEnvanterHareketler,
@@ -47,8 +46,6 @@ export const useEnvanter = () => {
     equipmentHistoryLoadingMore,
   } = useSelector((state) => state.envanter);
 
-  const getItems = useCallback(() => dispatch(fetchEnvanterItems()), [dispatch]);
-
   // Pull-to-refresh → her zaman Firestore'dan çek, cache'i güncelle
   const getItemsFirstPage = useCallback(
     (tur = 'Tümü') => dispatch(fetchEnvanterItemsFirstPage({ tur, forceRefresh: true })),
@@ -63,11 +60,6 @@ export const useEnvanter = () => {
     if (hasFresh && !turChanged) return Promise.resolve();
     return dispatch(fetchEnvanterItemsFirstPage({ tur, forceRefresh: false }));
   }, [dispatch, lastItemsFetchAt, activeTur]);
-
-  const getItemsNextPage = useCallback(
-    (tur = 'Tümü') => dispatch(fetchEnvanterItemsNextPage({ cursor: itemsCursor, tur })),
-    [dispatch, itemsCursor]
-  );
 
   // Pull-to-refresh için forceRefresh: true
   const getHareketler = useCallback(
@@ -198,10 +190,8 @@ export const useEnvanter = () => {
     equipmentHistoryHasMore,
     equipmentHistoryLoading,
     equipmentHistoryLoadingMore,
-    getItems,
     getItemsFirstPage,
     getItemsFirstPageIfNeeded,
-    getItemsNextPage,
     getItemsNextPageForActiveTur,
     getHareketler,
     getHareketlerIfNeeded,

@@ -151,39 +151,24 @@ export const fetchWorkRecordsNextPage = createAsyncThunk(
   }
 );
 
-/** Tüm kayıtları çeker (Home/Profile bugünkü kayıt için hâlâ kullanılabilir). */
-export const fetchWorkRecords = createAsyncThunk(
-  'database/fetchWorkRecords',
-  async ({ userId }, { rejectWithValue }) => {
-    try {
-      const q = query(
-        collection(db, 'workRecords'),
-        where('userId', '==', userId),
-        orderBy('createdAt', 'desc')
-      );
-      const snapshot = await getDocs(q);
-      const records = snapshot.docs.map(workRecordToPlain);
-
-      await cacheService.set(CACHE_KEYS.WORK_RECORDS + '_' + userId, records);
-      return records;
-    } catch (error) {
-      const cached = await cacheService.getAny(CACHE_KEYS.WORK_RECORDS + '_' + userId);
-      if (cached) return cached;
-      return rejectWithValue(error.message);
-    }
-  }
-);
-
 export const addWorkRecord = createAsyncThunk(
   'database/addWorkRecord',
   async ({ userId, data }, { rejectWithValue }) => {
     try {
+      const now = new Date();
       const docRef = await addDoc(collection(db, 'workRecords'), {
         userId,
         ...data,
-        createdAt: new Date(),
+        createdAt: now,
       });
-      return { id: docRef.id, userId, ...data };
+      const newRecord = { id: docRef.id, userId, ...data, createdAt: now.toISOString() };
+      // Cache'e yeni kaydı öne ekle (uygulama kapanıp açılınca güncel görünsün)
+      const cacheKey = `${CACHE_KEYS.WORK_RECORDS}_${userId}`;
+      await cacheService.patch(cacheKey, (cached) => {
+        if (!cached?.records) return cached;
+        return { ...cached, records: [newRecord, ...cached.records] };
+      });
+      return newRecord;
     } catch (error) {
       return rejectWithValue(error.message);
     }
@@ -192,10 +177,21 @@ export const addWorkRecord = createAsyncThunk(
 
 export const updateWorkRecord = createAsyncThunk(
   'database/updateWorkRecord',
-  async ({ recordId, data }, { rejectWithValue }) => {
+  async ({ recordId, data, userId }, { rejectWithValue }) => {
     try {
       const docRef = doc(db, 'workRecords', recordId);
       await updateDoc(docRef, data);
+      // Cache'deki kaydı yerinde güncelle (TTL korunur, Firestore isteği yok)
+      if (userId) {
+        const cacheKey = `${CACHE_KEYS.WORK_RECORDS}_${userId}`;
+        await cacheService.patch(cacheKey, (cached) => {
+          if (!cached?.records) return cached;
+          return {
+            ...cached,
+            records: cached.records.map(r => r.id === recordId ? { ...r, ...data } : r),
+          };
+        });
+      }
       return { id: recordId, ...data };
     } catch (error) {
       return rejectWithValue(error.message);
@@ -278,21 +274,6 @@ const databaseSlice = createSlice({
       })
       .addCase(fetchWorkRecordsNextPage.rejected, (state, action) => {
         state.loadingMore = false;
-        state.error = action.payload;
-      });
-
-    builder
-      .addCase(fetchWorkRecords.pending, (state) => { state.recordsLoading = true; state.error = null; })
-      .addCase(fetchWorkRecords.fulfilled, (state, action) => {
-        state.recordsLoading = false;
-        state.records = action.payload;
-        state.recordsCursor = null;
-        state.recordsHasMore = false;
-        state.lastWorkRecordsFetchAt = Date.now();
-        state.error = null;
-      })
-      .addCase(fetchWorkRecords.rejected, (state, action) => {
-        state.recordsLoading = false;
         state.error = action.payload;
       });
 
