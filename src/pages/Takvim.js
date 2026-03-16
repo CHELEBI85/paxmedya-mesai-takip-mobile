@@ -5,6 +5,7 @@ import {
   RefreshControl, KeyboardAvoidingView, Platform,
 } from 'react-native';
 import { MaterialIcons } from '@expo/vector-icons';
+import { useNavigation, useRoute, useFocusEffect } from '@react-navigation/native';
 import { useAuth } from '../hooks/useAuth';
 import { useSelector } from 'react-redux';
 import { useTakvim } from '../hooks/useTakvim';
@@ -55,6 +56,21 @@ const fmtGunAy = (dateStr) => {
 export const gorevHaftaStr = (gorev) => {
   if (!gorev?.baslangic) return '';
   return toDateStr(getWeekStart(new Date(gorev.baslangic + 'T00:00:00')));
+};
+
+// ─── Durum ────────────────────────────────────────────────────────────────────
+export const DURUM_CONFIG = {
+  beklemede:        { label: 'Beklemede',        color: '#555555', icon: 'hourglass-empty' },
+  devam_ediyor:     { label: 'Devam Ediyor',     color: '#6366f1', icon: 'play-circle-outline' },
+  onay_bekliyor:    { label: 'Onay Bekliyor',    color: '#f59e0b', icon: 'pending-actions' },
+  tamamlandi:       { label: 'Tamamlandı',       color: '#10b981', icon: 'check-circle' },
+  revize:           { label: 'Revize İstendi',   color: '#ef4444', icon: 'rate-review' },
+  revize_yapiliyor: { label: 'Revize Yapılıyor', color: '#f97316', icon: 'construction' },
+};
+
+export const getGorevDurum = (gorev) => {
+  if (gorev.durum) return gorev.durum;
+  return gorev.tamamlandi ? 'tamamlandi' : 'beklemede';
 };
 
 const weekRangeLabel = (weekStartStr) => {
@@ -134,7 +150,7 @@ function InlineCalendar({ value, onChange, minDate }) {
 // ─────────────────────────────────────────────────────────────────────────────
 // GorevForm
 // ─────────────────────────────────────────────────────────────────────────────
-const EMPTY_FORM = { proje: '', is: '', baslangic: '', teslim: '', sorumluUidler: [], sorumlular: [] };
+const EMPTY_FORM = { proje: '', is: '', aciklama: '', baslangic: '', teslim: '', sorumluUidler: [], sorumlular: [], maddeler: [] };
 
 function GorevForm({ visible, users, usersLoading, onClose, onSave, saving, initialData, defaultWeekStart, currentRole }) {
   const [form, setForm] = useState(EMPTY_FORM);
@@ -146,10 +162,12 @@ function GorevForm({ visible, users, usersLoading, onClose, onSave, saving, init
         ? {
           proje: initialData.proje || '',
           is: initialData.is || '',
+          aciklama: initialData.aciklama || '',
           baslangic: initialData.baslangic || '',
           teslim: initialData.teslim || '',
           sorumluUidler: initialData.sorumluUidler || [],
           sorumlular: initialData.sorumlular || [],
+          maddeler: initialData.maddeler || [],
         }
         : { ...EMPTY_FORM, baslangic: defaultWeekStart || '' }
       );
@@ -206,19 +224,33 @@ function GorevForm({ visible, users, usersLoading, onClose, onSave, saving, init
                     />
                   </View>
 
-                  {/* Yapılacak İş */}
-                  <Text style={gf.etiket}>Yapılacak İş</Text>
-                  <View style={[gf.inputWrap, { alignItems: 'flex-start', paddingTop: 12 }]}>
+                  {/* Görev Başlığı */}
+                  <Text style={gf.etiket}>Görev Başlığı</Text>
+                  <View style={gf.inputWrap}>
                     <MaterialIcons name="assignment" size={17} color="#555555" />
                     <TextInput
-                      style={[gf.input, { minHeight: 72, textAlignVertical: 'top' }]}
+                      style={gf.input}
                       value={form.is}
                       onChangeText={t => set('is', t)}
-                      placeholder="İş açıklaması"
+                      placeholder="Kısa görev başlığı"
+                      placeholderTextColor="#444444"
+                      color="#e0e0e0"
+                    />
+                  </View>
+
+                  {/* Açıklama */}
+                  <Text style={gf.etiket}>Açıklama <Text style={{ color: '#333333', fontWeight: '400' }}>(opsiyonel)</Text></Text>
+                  <View style={[gf.inputWrap, { alignItems: 'flex-start', paddingTop: 12 }]}>
+                    <MaterialIcons name="notes" size={17} color="#555555" style={{ marginTop: 2 }} />
+                    <TextInput
+                      style={[gf.input, { minHeight: 80, textAlignVertical: 'top' }]}
+                      value={form.aciklama}
+                      onChangeText={t => set('aciklama', t)}
+                      placeholder="Detaylı açıklama, notlar..."
                       placeholderTextColor="#444444"
                       color="#e0e0e0"
                       multiline
-                      numberOfLines={3}
+                      numberOfLines={4}
                     />
                   </View>
 
@@ -336,6 +368,39 @@ function GorevForm({ visible, users, usersLoading, onClose, onSave, saving, init
                     </View>
                   )}
 
+                  {/* Maddeler */}
+                  <Text style={gf.etiket}>Görev Maddeleri <Text style={{ color: '#333333', fontWeight: '400' }}>(opsiyonel)</Text></Text>
+                  {form.maddeler.map((madde, idx) => (
+                    <View key={madde.id} style={gf.maddeRow}>
+                      <View style={gf.maddeNumara}>
+                        <Text style={gf.maddeNumeraTxt}>{idx + 1}</Text>
+                      </View>
+                      <TextInput
+                        style={gf.maddeInput}
+                        value={madde.metin}
+                        onChangeText={t => set('maddeler', form.maddeler.map(m => m.id === madde.id ? { ...m, metin: t } : m))}
+                        placeholder="Madde açıklaması..."
+                        placeholderTextColor="#444444"
+                        color="#e0e0e0"
+                      />
+                      <TouchableOpacity
+                        style={gf.maddeSilBtn}
+                        onPress={() => set('maddeler', form.maddeler.filter(m => m.id !== madde.id))}
+                        activeOpacity={0.7}
+                      >
+                        <MaterialIcons name="close" size={16} color="#555555" />
+                      </TouchableOpacity>
+                    </View>
+                  ))}
+                  <TouchableOpacity
+                    style={gf.maddeEkleBtn}
+                    onPress={() => set('maddeler', [...form.maddeler, { id: String(Date.now() + Math.random()), metin: '', tamamlandi: false }])}
+                    activeOpacity={0.75}
+                  >
+                    <MaterialIcons name="add" size={16} color="#6366f1" />
+                    <Text style={gf.maddeEkleTxt}>Madde Ekle</Text>
+                  </TouchableOpacity>
+
                   <TouchableOpacity
                     style={[gf.kaydetBtn, !valid && gf.kaydetDisabled]}
                     onPress={() => valid && !saving && onSave(form)}
@@ -362,87 +427,81 @@ function GorevForm({ visible, users, usersLoading, onClose, onSave, saving, init
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// GorevKart
+// GorevKart — minimal, tıklanınca detay açar
 // ─────────────────────────────────────────────────────────────────────────────
-const GorevKart = React.memo(function GorevKart({ gorev, isAdmin, onEdit, onDelete, onTamamla }) {
-  const renk = gorev.tamamlandi ? '#10b981' : projeRenk(gorev.proje);
+const GorevKart = React.memo(function GorevKart({ gorev, onDetay }) {
+  const durum = getGorevDurum(gorev);
+  const dc = DURUM_CONFIG[durum] || DURUM_CONFIG.beklemede;
+  const renk = dc.color;
   const today = toDateStr(new Date());
-  const overdue = !gorev.tamamlandi && gorev.teslim < today;
-  const nearDeadline = !overdue && !gorev.tamamlandi && gorev.teslim <= toDateStr(addDays(new Date(), 2));
+  const overdue = durum !== 'tamamlandi' && gorev.teslim < today;
+  const nearDeadline = !overdue && durum !== 'tamamlandi' && gorev.teslim <= toDateStr(addDays(new Date(), 2));
+  const maddeler = gorev.maddeler || [];
+  const tamamlananMadde = maddeler.filter(m => m.tamamlandi).length;
+  const toplamMadde = maddeler.length;
+  const isTamamlandi = durum === 'tamamlandi';
 
   return (
-    <View style={[gk.kart, { borderColor: renk + '30' }, gorev.tamamlandi && gk.kartTamamlandi]}>
+    <TouchableOpacity
+      style={[gk.kart, { borderColor: renk + '30' }, isTamamlandi && gk.kartTamamlandi]}
+      onPress={() => onDetay(gorev)}
+      activeOpacity={0.75}
+    >
       <View style={[gk.serit, { backgroundColor: renk }]} />
       <View style={gk.body}>
-
-        {/* Üst satır */}
+        {/* Proje + tarih */}
         <View style={gk.ustRow}>
           <View style={[gk.projeBadge, { backgroundColor: renk + '1a' }]}>
-            <MaterialIcons name={gorev.tamamlandi ? 'check-circle' : 'folder'} size={11} color={renk} />
+            <MaterialIcons name="folder" size={11} color={renk} />
             <Text style={[gk.projeTxt, { color: renk }]} numberOfLines={1}>{gorev.proje}</Text>
           </View>
-          {gorev.tamamlandi ? (
-            <View style={gk.tamamlandiBadge}>
-              <MaterialIcons name="verified" size={11} color="#10b981" />
-              <Text style={gk.tamamlandiTxt}>Tamamlandı</Text>
-            </View>
-          ) : (
-            <View style={[gk.tarihChip, overdue && gk.tarihChipOverdue]}>
-              <MaterialIcons name="schedule" size={11} color={overdue ? '#ef4444' : nearDeadline ? '#f59e0b' : '#444444'} />
-              <Text style={[gk.tarihTxt, overdue && { color: '#ef4444' }, nearDeadline && !overdue && { color: '#f59e0b' }]}>
-                {fmtGunAy(gorev.baslangic)} → {fmtGunAy(gorev.teslim)}
-              </Text>
-            </View>
-          )}
+          <View style={[gk.tarihChip, overdue && gk.tarihChipOverdue]}>
+            <MaterialIcons name="schedule" size={11} color={overdue ? '#ef4444' : nearDeadline ? '#f59e0b' : '#444444'} />
+            <Text style={[gk.tarihTxt, overdue && { color: '#ef4444' }, nearDeadline && !overdue && { color: '#f59e0b' }]}>
+              {fmtGunAy(gorev.baslangic)} → {fmtGunAy(gorev.teslim)}
+            </Text>
+          </View>
         </View>
-
-        <Text style={[gk.isTxt, gorev.tamamlandi && gk.isTxtTamamlandi]} numberOfLines={3}>{gorev.is}</Text>
-
+        {/* Durum */}
+        <View style={[gk.durumBadge, { backgroundColor: renk + '18', borderColor: renk + '40', alignSelf: 'flex-start' }]}>
+          <MaterialIcons name={dc.icon} size={11} color={renk} />
+          <Text style={[gk.durumTxt, { color: renk }]}>{dc.label}</Text>
+        </View>
+        {/* Başlık */}
+        <Text style={[gk.isTxt, isTamamlandi && gk.isTxtTamamlandi]} numberOfLines={1}>{gorev.is}</Text>
+        {/* Açıklama önizleme */}
+        {!!gorev.aciklama && (
+          <Text style={gk.aciklamaOnizleme} numberOfLines={1}>{gorev.aciklama}</Text>
+        )}
+        {/* Progress bar */}
+        {toplamMadde > 0 && (
+          <View style={gk.progressRow}>
+            <View style={gk.progressBg}>
+              <View style={[gk.progressFill, { width: `${(tamamlananMadde / toplamMadde) * 100}%`, backgroundColor: renk }]} />
+            </View>
+            <Text style={gk.progressTxt}>{tamamlananMadde}/{toplamMadde}</Text>
+          </View>
+        )}
+        {/* Sorumlular */}
         {gorev.sorumlular?.length > 0 && (
           <View style={gk.sorumluRow}>
             <MaterialIcons name="group" size={12} color="#444444" />
-            {gorev.sorumlular.slice(0, 5).map(s => {
+            {gorev.sorumlular.slice(0, 4).map(s => {
               const r = projeRenk(s.displayName);
               return (
                 <View key={s.uid} style={[gk.sorumluChip, { backgroundColor: r + '1a', borderColor: r + '33' }]}>
-                  <Text style={[gk.sorumluChipTxt, { color: r }]}>
-                    {(s.displayName || '?').split(' ')[0]}
-                  </Text>
+                  <Text style={[gk.sorumluChipTxt, { color: r }]}>{(s.displayName || '?').split(' ')[0]}</Text>
                 </View>
               );
             })}
-            {gorev.sorumlular.length > 5 && (
-              <Text style={gk.fazla}>+{gorev.sorumlular.length - 5}</Text>
-            )}
-          </View>
-        )}
-
-        {isAdmin && (
-          <View style={gk.aksiyonRow}>
-            {!gorev.tamamlandi && (
-              <TouchableOpacity style={gk.tamamlaBtn} onPress={() => onTamamla(gorev)} activeOpacity={0.75}>
-                <MaterialIcons name="check-circle-outline" size={13} color="#10b981" />
-                <Text style={gk.tamamlaBtnTxt}>Tamamlandı</Text>
-              </TouchableOpacity>
-            )}
-            {gorev.tamamlandi && (
-              <TouchableOpacity style={gk.geriAlBtn} onPress={() => onTamamla(gorev)} activeOpacity={0.75}>
-                <MaterialIcons name="replay" size={13} color="#555555" />
-                <Text style={gk.geriAlTxt}>Geri Al</Text>
-              </TouchableOpacity>
-            )}
-            <TouchableOpacity style={gk.duzenleBtn} onPress={() => onEdit(gorev)} activeOpacity={0.75}>
-              <MaterialIcons name="edit" size={13} color="#6366f1" />
-              <Text style={gk.duzenleTxt}>Düzenle</Text>
-            </TouchableOpacity>
-            <TouchableOpacity style={gk.silBtn} onPress={() => onDelete(gorev)} activeOpacity={0.75}>
-              <MaterialIcons name="delete-outline" size={13} color="#ef4444" />
-              <Text style={gk.silTxt}>Sil</Text>
-            </TouchableOpacity>
+            {gorev.sorumlular.length > 4 && <Text style={gk.fazla}>+{gorev.sorumlular.length - 4}</Text>}
           </View>
         )}
       </View>
-    </View>
+      <View style={gk.detayOk}>
+        <MaterialIcons name="chevron-right" size={18} color="#333333" />
+      </View>
+    </TouchableOpacity>
   );
 });
 
@@ -618,21 +677,21 @@ const TableSatir = React.memo(function TableSatir({ gorev, idx, onEdit, onDelete
         )}
       </View>
       {/* Durum */}
-      <View style={[tb.hucre, { width: COL.durum }]}>
-        {gorev.tamamlandi ? (
-          <View style={tb.tamamBadge}>
-            <MaterialIcons name="check-circle" size={11} color="#10b981" />
-            <Text style={tb.tamamTxt}>Tamamlandı</Text>
-          </View>
-        ) : overdue ? (
+      <View style={[tb.hucre, { width: COL.durum, flexDirection: 'column', gap: 3 }]}>
+        {(() => {
+          const dur = getGorevDurum(gorev);
+          const dc = DURUM_CONFIG[dur] || DURUM_CONFIG.beklemede;
+          return (
+            <View style={[tb.durumBadge, { backgroundColor: dc.color + '18', borderColor: dc.color + '40' }]}>
+              <MaterialIcons name={dc.icon} size={10} color={dc.color} />
+              <Text style={[tb.durumTxt, { color: dc.color }]}>{dc.label}</Text>
+            </View>
+          );
+        })()}
+        {overdue && getGorevDurum(gorev) !== 'tamamlandi' && (
           <View style={tb.geciktiBadge}>
-            <MaterialIcons name="warning" size={11} color="#ef4444" />
+            <MaterialIcons name="warning" size={10} color="#ef4444" />
             <Text style={tb.geciktiTxt}>Gecikmiş</Text>
-          </View>
-        ) : (
-          <View style={tb.devamBadge}>
-            <MaterialIcons name="schedule" size={11} color="#6366f1" />
-            <Text style={tb.devamTxt}>Devam</Text>
           </View>
         )}
       </View>
@@ -665,7 +724,7 @@ const TableSatir = React.memo(function TableSatir({ gorev, idx, onEdit, onDelete
 // ─────────────────────────────────────────────────────────────────────────────
 // OverviewTab — Tab 2 full overview (tablo görünümü)
 // ─────────────────────────────────────────────────────────────────────────────
-function OverviewTab({ gorevler, loading, refreshing, onRefresh, onEdit, onDelete, onTamamla, kullanicilar }) {
+function OverviewTab({ gorevler, loading, refreshing, onRefresh, onEdit, onDelete, onTamamla, onDurumGuncelle, onMaddeToggle, kullanicilar }) {
   const today = toDateStr(new Date());
   const [durum, setDurum] = useState('hepsi');
   const [seciliProje, setSeciliProje] = useState('');
@@ -675,20 +734,23 @@ function OverviewTab({ gorevler, loading, refreshing, onRefresh, onEdit, onDelet
 
   const filtered = useMemo(() => {
     let list = [...gorevler];
-    if (durum === 'devam') list = list.filter(g => !g.tamamlandi && g.teslim >= today);
-    else if (durum === 'tamamlandi') list = list.filter(g => g.tamamlandi);
-    else if (durum === 'gecikti') list = list.filter(g => !g.tamamlandi && g.teslim < today);
+    const isDone = g => getGorevDurum(g) === 'tamamlandi';
+    if (durum === 'devam') list = list.filter(g => !isDone(g) && g.teslim >= today);
+    else if (durum === 'tamamlandi') list = list.filter(g => isDone(g));
+    else if (durum === 'gecikti') list = list.filter(g => !isDone(g) && g.teslim < today);
     if (seciliProje) list = list.filter(g => g.proje === seciliProje);
     if (seciliKullanici) list = list.filter(g => g.sorumluUidler?.includes(seciliKullanici));
     return list.sort((a, b) => {
-      if (a.tamamlandi !== b.tamamlandi) return a.tamamlandi ? 1 : -1;
+      const aDone = isDone(a); const bDone = isDone(b);
+      if (aDone !== bDone) return aDone ? 1 : -1;
       return (b.baslangic || '').localeCompare(a.baslangic || '');
     });
   }, [gorevler, durum, seciliProje, seciliKullanici, today]);
 
-  const bekleyenSayi = useMemo(() => gorevler.filter(g => !g.tamamlandi).length, [gorevler]);
-  const tamamSayi = useMemo(() => gorevler.filter(g => g.tamamlandi).length, [gorevler]);
-  const gecikmisSayi = useMemo(() => gorevler.filter(g => !g.tamamlandi && g.teslim < today).length, [gorevler, today]);
+  const bekleyenSayi = useMemo(() => gorevler.filter(g => getGorevDurum(g) !== 'tamamlandi').length, [gorevler]);
+  const tamamSayi = useMemo(() => gorevler.filter(g => getGorevDurum(g) === 'tamamlandi').length, [gorevler]);
+  const gecikmisSayi = useMemo(() => gorevler.filter(g => getGorevDurum(g) !== 'tamamlandi' && g.teslim < today).length, [gorevler, today]);
+  const onayBekleyenSayi = useMemo(() => gorevler.filter(g => getGorevDurum(g) === 'onay_bekliyor').length, [gorevler]);
 
   if (loading && gorevler.length === 0) {
     return <View style={t.bosOrta}><ActivityIndicator color="#ffd800" size="large" /></View>;
@@ -714,6 +776,12 @@ function OverviewTab({ gorevler, loading, refreshing, onRefresh, onEdit, onDelet
           <Text style={[ov.ozetSayi, { color: '#10b981' }]}>{tamamSayi}</Text>
           <Text style={ov.ozetEtiket}>Tamamlanan</Text>
         </View>
+        {onayBekleyenSayi > 0 && (
+          <View style={[ov.ozetKart, { borderColor: '#f59e0b30' }]}>
+            <Text style={[ov.ozetSayi, { color: '#f59e0b' }]}>{onayBekleyenSayi}</Text>
+            <Text style={ov.ozetEtiket}>Onay Bekliyor</Text>
+          </View>
+        )}
         {gecikmisSayi > 0 && (
           <View style={[ov.ozetKart, { borderColor: '#ef444430' }]}>
             <Text style={[ov.ozetSayi, { color: '#ef4444' }]}>{gecikmisSayi}</Text>
@@ -791,12 +859,14 @@ function OverviewTab({ gorevler, loading, refreshing, onRefresh, onEdit, onDelet
 // Ana Bileşen
 // ─────────────────────────────────────────────────────────────────────────────
 export default function Takvim() {
+  const navigation = useNavigation();
+  const route = useRoute();
   const { user } = useAuth();
   const userProfile = useSelector(s => s.database.userProfile);
   const {
     gorevler, kullanicilar, loading, kullanicilarLoading,
     getGorevler, getGorevlerIfNeeded, getKullanicilar, getKullanicilarIfNeeded,
-    gorevEkle, gorevGuncelle, gorevSil, gorevTamamla,
+    gorevEkle, gorevGuncelle, gorevSil, gorevTamamla, gorevDurumGuncelle,
   } = useTakvim();
 
   const role = userProfile?.role;
@@ -808,6 +878,7 @@ export default function Takvim() {
   const [formVisible, setFormVisible] = useState(false);
   const [editGorev, setEditGorev] = useState(null);
   const [saving, setSaving] = useState(false);
+  const [revizeModal, setRevizeModal] = useState({ visible: false, gorev: null, not: '' });
 
   // Tab 1 filter state
   const [tab1Durum, setTab1Durum] = useState('hepsi');
@@ -825,11 +896,37 @@ export default function Takvim() {
     if (isAdmin) getKullanicilarIfNeeded();
   }, [user?.uid, role]);
 
+  // Sayfaya her dönüşte (GorevDetay'dan geri gelince vs.) stale kontrolü yap
+  useFocusEffect(
+    useCallback(() => {
+      if (!user?.uid) return;
+      getGorevlerIfNeeded(user.uid, role);
+    }, [user?.uid, role, getGorevlerIfNeeded])
+  );
+
+  // GorevDetay'dan "Düzenle" ile gelindiğinde formu aç
+  useEffect(() => {
+    const editGorevId = route.params?.editGorevId;
+    if (!editGorevId || !isAdmin) return;
+    const g = gorevler.find(x => x.id === editGorevId);
+    if (g) {
+      setEditGorev(g);
+      setFormVisible(true);
+      // Paramı temizle (tekrar tetiklenmesin)
+      navigation.setParams({ editGorevId: undefined });
+    }
+  }, [route.params?.editGorevId, gorevler, isAdmin]);
+
   const onRefresh = useCallback(async () => {
     if (!user?.uid) return;
     setRefreshing(true);
-    try { await getGorevler(user.uid, role); } finally { setRefreshing(false); }
-  }, [user, role, getGorevler]);
+    try {
+      await Promise.all([
+        getGorevler(user.uid, role),
+        isAdmin ? getKullanicilar() : Promise.resolve(),
+      ]);
+    } finally { setRefreshing(false); }
+  }, [user, role, isAdmin, getGorevler, getKullanicilar]);
 
   const weekStartStr = toDateStr(weekStart);
 
@@ -839,9 +936,10 @@ export default function Takvim() {
   // Tüm görevleri haftaya göre grupla — en yeni hafta önce (Tab 1 filtresiyle)
   const sections = useMemo(() => {
     let filtered = gorevler;
-    if (tab1Durum === 'devam') filtered = filtered.filter(g => !g.tamamlandi && g.teslim >= tab1Today);
-    else if (tab1Durum === 'tamamlandi') filtered = filtered.filter(g => g.tamamlandi);
-    else if (tab1Durum === 'gecikti') filtered = filtered.filter(g => !g.tamamlandi && g.teslim < tab1Today);
+    const isDone = g => getGorevDurum(g) === 'tamamlandi';
+    if (tab1Durum === 'devam') filtered = filtered.filter(g => !isDone(g) && g.teslim >= tab1Today);
+    else if (tab1Durum === 'tamamlandi') filtered = filtered.filter(g => isDone(g));
+    else if (tab1Durum === 'gecikti') filtered = filtered.filter(g => !isDone(g) && g.teslim < tab1Today);
     if (tab1Proje) filtered = filtered.filter(g => g.proje === tab1Proje);
     if (tab1Kullanici) filtered = filtered.filter(g => g.sorumluUidler?.includes(tab1Kullanici));
 
@@ -859,9 +957,28 @@ export default function Takvim() {
 
   const handleAdd = useCallback(() => { setEditGorev(null); setFormVisible(true); }, []);
   const handleEdit = useCallback((g) => { setEditGorev(g); setFormVisible(true); }, []);
+
+  // Manager, admin'in oluşturduğu görevi tamamlandıya çekemez
+  const canApprove = useCallback((g) => {
+    if (role === 'admin') return true;
+    if (role === 'manager') return g.olusturanRole !== 'admin';
+    return false;
+  }, [role]);
+
   const handleTamamla = useCallback((g) => {
-    if (g.tamamlandi) {
-      gorevTamamla(g.id, false);
+    const durum = getGorevDurum(g);
+    if (durum === 'tamamlandi') {
+      gorevDurumGuncelle(g.id, 'devam_ediyor');
+      return;
+    }
+    if (!canApprove(g)) {
+      showModal({
+        icon: 'lock', iconColor: '#ef4444',
+        title: 'Yetki Gerekli',
+        message: 'Bu görevi sadece admin onaylayabilir.',
+        confirmText: 'Tamam', hideCancel: true,
+        onConfirm: hideModal,
+      });
       return;
     }
     showModal({
@@ -869,11 +986,72 @@ export default function Takvim() {
       title: 'Görevi Tamamla',
       message: `"${g.proje}" projesindeki bu görevi tamamlandı olarak işaretlemek istiyor musunuz?`,
       confirmText: 'Tamamlandı İşaretle', cancelText: 'İptal',
-      onConfirm: () => { hideModal(); gorevTamamla(g.id, true); },
+      onConfirm: () => { hideModal(); gorevDurumGuncelle(g.id, 'tamamlandi'); },
     });
-  }, [showModal, hideModal, gorevTamamla]);
+  }, [showModal, hideModal, gorevDurumGuncelle, canApprove]);
+
+  const handleDurumGuncelle = useCallback((g, yeniDurum) => {
+    if (yeniDurum === 'revize') {
+      setRevizeModal({ visible: true, gorev: g, not: '' });
+      return;
+    }
+    if (yeniDurum === 'onay_bekliyor') {
+      showModal({
+        icon: 'send', iconColor: '#f59e0b',
+        title: 'Onaya Gönder',
+        message: 'Görevi onay için göndermek istiyor musunuz? Gönderildikten sonra düzenleyemezsiniz.',
+        confirmText: 'Onaya Gönder', cancelText: 'İptal',
+        onConfirm: () => { hideModal(); gorevDurumGuncelle(g.id, yeniDurum); },
+      });
+      return;
+    }
+    if (yeniDurum === 'tamamlandi') {
+      if (!canApprove(g)) {
+        showModal({
+          icon: 'lock', iconColor: '#ef4444',
+          title: 'Yetki Gerekli',
+          message: 'Bu görevi sadece admin onaylayabilir.',
+          confirmText: 'Tamam', hideCancel: true,
+          onConfirm: hideModal,
+        });
+        return;
+      }
+      showModal({
+        icon: 'verified', iconColor: '#10b981',
+        title: 'Görevi Onayla',
+        message: `"${g.proje}" projesindeki görev onaylanacak ve tamamlandı olarak işaretlenecek.`,
+        confirmText: 'Onayla', cancelText: 'İptal',
+        onConfirm: () => { hideModal(); gorevDurumGuncelle(g.id, yeniDurum); },
+      });
+      return;
+    }
+    gorevDurumGuncelle(g.id, yeniDurum);
+  }, [showModal, hideModal, gorevDurumGuncelle, canApprove]);
+
+  const handleMaddeToggle = useCallback((g, maddeId) => {
+    const yeniMaddeler = (g.maddeler || []).map(m =>
+      m.id === maddeId ? { ...m, tamamlandi: !m.tamamlandi } : m
+    );
+    gorevGuncelle(g.id, { maddeler: yeniMaddeler });
+  }, [gorevGuncelle]);
+
+  const canDelete = useCallback((g) => {
+    if (role === 'admin') return true;
+    if (role === 'manager') return g.olusturanId === user?.uid;
+    return false;
+  }, [role, user?.uid]);
 
   const handleDelete = useCallback((g) => {
+    if (!canDelete(g)) {
+      showModal({
+        icon: 'lock', iconColor: '#ef4444',
+        title: 'Yetki Gerekli',
+        message: 'Sadece kendi oluşturduğunuz görevleri silebilirsiniz.',
+        confirmText: 'Tamam', hideCancel: true,
+        onConfirm: hideModal,
+      });
+      return;
+    }
     showModal({
       icon: 'delete-forever', iconColor: '#ef4444',
       title: 'Görevi Sil',
@@ -881,7 +1059,7 @@ export default function Takvim() {
       confirmText: 'Sil', cancelText: 'İptal', destructive: true,
       onConfirm: async () => { hideModal(); await gorevSil(g.id); },
     });
-  }, [showModal, hideModal, gorevSil]);
+  }, [showModal, hideModal, gorevSil, canDelete]);
 
   const handleSave = useCallback(async (formData) => {
     setSaving(true);
@@ -889,12 +1067,16 @@ export default function Takvim() {
       const payload = {
         proje: formData.proje.trim(),
         is: formData.is.trim(),
+        aciklama: formData.aciklama?.trim() || '',
         baslangic: formData.baslangic,
         teslim: formData.teslim,
         sorumluUidler: formData.sorumluUidler,
         sorumlular: formData.sorumlular,
+        maddeler: (formData.maddeler || []).filter(m => m.metin.trim()),
         olusturanId: user.uid,
         olusturanAd: userProfile?.displayName || user?.displayName || '',
+        olusturanRole: role || 'admin',
+        ...(!editGorev?.id ? { durum: 'beklemede', tamamlandi: false } : {}),
       };
       if (editGorev?.id) await gorevGuncelle(editGorev.id, payload);
       else await gorevEkle(payload);
@@ -904,9 +1086,11 @@ export default function Takvim() {
     }
   }, [user, userProfile, editGorev, gorevEkle, gorevGuncelle]);
 
+  const handleDetay = useCallback((g) => navigation.navigate('GorevDetay', { gorevId: g.id }), [navigation]);
+
   const renderItem = useCallback(({ item }) => (
-    <GorevKart gorev={item} isAdmin={isAdmin} onEdit={handleEdit} onDelete={handleDelete} onTamamla={handleTamamla} />
-  ), [isAdmin, handleEdit, handleDelete, handleTamamla]);
+    <GorevKart gorev={item} onDetay={handleDetay} />
+  ), [handleDetay]);
 
   const renderSectionHeader = useCallback(({ section }) => (
     <HaftaBaslik weekStr={section.weekStr} count={section.data.length} />
@@ -1013,6 +1197,8 @@ export default function Takvim() {
           onEdit={handleEdit}
           onDelete={handleDelete}
           onTamamla={handleTamamla}
+          onDurumGuncelle={handleDurumGuncelle}
+          onMaddeToggle={handleMaddeToggle}
           kullanicilar={kullanicilar}
         />
       )}
@@ -1042,6 +1228,48 @@ export default function Takvim() {
         cancelText={modal.cancelText} destructive={modal.destructive}
         hideCancel={modal.hideCancel} onConfirm={modal.onConfirm} onCancel={hideModal}
       />
+
+      {/* Revize Modal */}
+      <Modal transparent visible={revizeModal.visible} animationType="fade" statusBarTranslucent>
+        <TouchableWithoutFeedback onPress={() => setRevizeModal(m => ({ ...m, visible: false }))}>
+          <View style={t.revizeOverlay}>
+            <TouchableWithoutFeedback>
+              <View style={t.revizeBox}>
+                <View style={[t.revizeIkon, { backgroundColor: '#f59e0b18' }]}>
+                  <MaterialIcons name="rate-review" size={28} color="#f59e0b" />
+                </View>
+                <Text style={t.revizeBaslik}>Revize Notu</Text>
+                <Text style={t.revizeAlt}>Kullanıcıya iletilecek açıklamayı yazın (opsiyonel)</Text>
+                <TextInput
+                  style={t.revizeInput}
+                  value={revizeModal.not}
+                  onChangeText={v => setRevizeModal(m => ({ ...m, not: v }))}
+                  placeholder="Düzeltilmesi gereken noktalar..."
+                  placeholderTextColor="#444444"
+                  color="#e0e0e0"
+                  multiline
+                  numberOfLines={3}
+                  textAlignVertical="top"
+                />
+                <TouchableOpacity
+                  style={t.revizeGonderBtn}
+                  onPress={() => {
+                    gorevDurumGuncelle(revizeModal.gorev.id, 'revize', revizeModal.not.trim() || undefined);
+                    setRevizeModal({ visible: false, gorev: null, not: '' });
+                  }}
+                  activeOpacity={0.85}
+                >
+                  <MaterialIcons name="send" size={16} color="#000000" />
+                  <Text style={t.revizeGonderTxt}>Revize Gönder</Text>
+                </TouchableOpacity>
+                <TouchableOpacity onPress={() => setRevizeModal({ visible: false, gorev: null, not: '' })} style={t.revizeIptalBtn}>
+                  <Text style={t.revizeIptalTxt}>İptal</Text>
+                </TouchableOpacity>
+              </View>
+            </TouchableWithoutFeedback>
+          </View>
+        </TouchableWithoutFeedback>
+      </Modal>
     </View>
   );
 }
@@ -1113,6 +1341,33 @@ const t = StyleSheet.create({
     shadowColor: '#ffd800', shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.4, shadowRadius: 10, elevation: 8,
   },
+
+  // Revize Modal
+  revizeOverlay: {
+    flex: 1, backgroundColor: '#000000cc',
+    justifyContent: 'center', alignItems: 'center', paddingHorizontal: 28,
+  },
+  revizeBox: {
+    backgroundColor: '#1e293b', borderRadius: 20, borderWidth: 1, borderColor: '#334155',
+    width: '100%', paddingHorizontal: 22, paddingTop: 26, paddingBottom: 20,
+    alignItems: 'center', gap: 10,
+  },
+  revizeIkon: { width: 56, height: 56, borderRadius: 28, alignItems: 'center', justifyContent: 'center' },
+  revizeBaslik: { fontSize: 16, fontWeight: '700', color: '#f8fafc' },
+  revizeAlt: { fontSize: 12, color: '#64748b', textAlign: 'center' },
+  revizeInput: {
+    width: '100%', backgroundColor: '#0f172a', borderRadius: 12, borderWidth: 1, borderColor: '#334155',
+    paddingHorizontal: 12, paddingVertical: 10, fontSize: 14, minHeight: 80,
+    marginTop: 4,
+  },
+  revizeGonderBtn: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8,
+    backgroundColor: '#f59e0b', borderRadius: 12, paddingVertical: 13,
+    width: '100%', marginTop: 4,
+  },
+  revizeGonderTxt: { fontSize: 15, fontWeight: '700', color: '#000000' },
+  revizeIptalBtn: { paddingVertical: 8 },
+  revizeIptalTxt: { fontSize: 14, fontWeight: '600', color: '#475569' },
 });
 
 const gk = StyleSheet.create({
@@ -1136,7 +1391,8 @@ const gk = StyleSheet.create({
   },
   tarihChipOverdue: { borderColor: '#ef444430' },
   tarihTxt: { fontSize: 11, color: '#555555', fontWeight: '600' },
-  isTxt: { fontSize: 14, color: '#cccccc', lineHeight: 21 },
+  isTxt: { fontSize: 14, fontWeight: '600', color: '#e0e0e0', lineHeight: 20 },
+  aciklamaOnizleme: { fontSize: 12, color: '#555555', lineHeight: 18 },
   sorumluRow: { flexDirection: 'row', alignItems: 'center', gap: 6, flexWrap: 'wrap' },
   sorumluChip: { paddingHorizontal: 8, paddingVertical: 3, borderRadius: 7, borderWidth: 1 },
   sorumluChipTxt: { fontSize: 11, fontWeight: '600' },
@@ -1146,6 +1402,7 @@ const gk = StyleSheet.create({
     borderTopWidth: 1, borderTopColor: '#1e1e1e', paddingTop: 10,
   },
   kartTamamlandi: { opacity: 0.7 },
+  detayOk: { justifyContent: 'center', paddingRight: 8 },
   tamamlandiBadge: {
     flexDirection: 'row', alignItems: 'center', gap: 4,
     backgroundColor: '#10b98118', borderRadius: 8, borderWidth: 1, borderColor: '#10b98133',
@@ -1177,6 +1434,70 @@ const gk = StyleSheet.create({
     backgroundColor: '#ef444410', borderWidth: 1, borderColor: '#ef444430',
   },
   silTxt: { fontSize: 12, fontWeight: '600', color: '#ef4444' },
+
+  // Durum badge
+  durumRow: { flexDirection: 'row', alignItems: 'center', gap: 8, flexWrap: 'wrap' },
+  durumBadge: {
+    flexDirection: 'row', alignItems: 'center', gap: 5,
+    paddingHorizontal: 9, paddingVertical: 4, borderRadius: 8,
+    borderWidth: 1,
+  },
+  durumTxt: { fontSize: 11, fontWeight: '700' },
+  revizeNotu: { fontSize: 11, color: '#ef4444', flex: 1 },
+
+  // Maddeler
+  maddelerWrap: { gap: 6, marginTop: 2 },
+  progressRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  progressBg: { flex: 1, height: 4, backgroundColor: '#1e1e1e', borderRadius: 2, overflow: 'hidden' },
+  progressFill: { height: 4, borderRadius: 2 },
+  progressTxt: { fontSize: 10, fontWeight: '700', color: '#555555', minWidth: 28, textAlign: 'right' },
+  maddeSatir: { flexDirection: 'row', alignItems: 'flex-start', gap: 8, paddingVertical: 3 },
+  maddeCheck: {
+    width: 18, height: 18, borderRadius: 5, borderWidth: 1.5, borderColor: '#333333',
+    alignItems: 'center', justifyContent: 'center', marginTop: 2, flexShrink: 0,
+  },
+  maddeCheckDolu: { backgroundColor: '#ffd800', borderColor: '#ffd800' },
+  maddeTxt: { fontSize: 13, color: '#aaaaaa', flex: 1, lineHeight: 20 },
+  maddeTxtDolu: { textDecorationLine: 'line-through', color: '#444444' },
+
+  // User aksiyon butonları
+  baslaBtn: {
+    flexDirection: 'row', alignItems: 'center', gap: 5, flex: 1,
+    paddingHorizontal: 10, paddingVertical: 7, borderRadius: 8,
+    backgroundColor: '#6366f110', borderWidth: 1, borderColor: '#6366f130',
+  },
+  baslaBtnTxt: { fontSize: 12, fontWeight: '700', color: '#6366f1' },
+  onayaGonderBtn: {
+    flexDirection: 'row', alignItems: 'center', gap: 5, flex: 1,
+    paddingHorizontal: 10, paddingVertical: 7, borderRadius: 8,
+    backgroundColor: '#f59e0b12', borderWidth: 1, borderColor: '#f59e0b35',
+  },
+  onayaGonderTxt: { fontSize: 12, fontWeight: '700', color: '#f59e0b' },
+  tekrarGonderBtn: {
+    flexDirection: 'row', alignItems: 'center', gap: 5, flex: 1,
+    paddingHorizontal: 10, paddingVertical: 7, borderRadius: 8,
+    backgroundColor: '#6366f110', borderWidth: 1, borderColor: '#6366f130',
+  },
+  tekrarGonderTxt: { fontSize: 12, fontWeight: '700', color: '#6366f1' },
+  onayBekliyorInfo: {
+    flexDirection: 'row', alignItems: 'center', gap: 5,
+    paddingHorizontal: 10, paddingVertical: 7,
+  },
+  onayBekliyorTxt: { fontSize: 12, fontWeight: '600', color: '#f59e0b' },
+
+  // Admin onay/revize butonları
+  onaylaBtn: {
+    flexDirection: 'row', alignItems: 'center', gap: 5, flex: 1,
+    paddingHorizontal: 10, paddingVertical: 7, borderRadius: 8,
+    backgroundColor: '#10b98112', borderWidth: 1, borderColor: '#10b98130',
+  },
+  onaylaBtnTxt: { fontSize: 12, fontWeight: '700', color: '#10b981' },
+  revizeBtn: {
+    flexDirection: 'row', alignItems: 'center', gap: 5,
+    paddingHorizontal: 10, paddingVertical: 7, borderRadius: 8,
+    backgroundColor: '#f59e0b12', borderWidth: 1, borderColor: '#f59e0b35',
+  },
+  revizeBtnTxt: { fontSize: 12, fontWeight: '700', color: '#f59e0b' },
 });
 
 const gf = StyleSheet.create({
@@ -1244,6 +1565,27 @@ const gf = StyleSheet.create({
   },
   kaydetDisabled: { opacity: 0.35 },
   kaydetTxt: { fontSize: 15, fontWeight: '700', color: '#000000' },
+
+  // Maddeler form stilleri
+  maddeRow: {
+    flexDirection: 'row', alignItems: 'center', gap: 8,
+    backgroundColor: '#1a1a1a', borderRadius: 10, borderWidth: 1, borderColor: '#2a2a2a',
+    paddingHorizontal: 10, paddingVertical: 8, marginBottom: 6,
+  },
+  maddeNumara: {
+    width: 20, height: 20, borderRadius: 10, backgroundColor: '#2a2a2a',
+    alignItems: 'center', justifyContent: 'center', flexShrink: 0,
+  },
+  maddeNumeraTxt: { fontSize: 10, fontWeight: '800', color: '#555555' },
+  maddeInput: { flex: 1, fontSize: 13, color: '#e0e0e0' },
+  maddeSilBtn: { padding: 4 },
+  maddeEkleBtn: {
+    flexDirection: 'row', alignItems: 'center', gap: 6,
+    paddingVertical: 9, paddingHorizontal: 12,
+    borderRadius: 10, borderWidth: 1, borderColor: '#6366f130',
+    backgroundColor: '#6366f108',
+  },
+  maddeEkleTxt: { fontSize: 13, fontWeight: '600', color: '#6366f1' },
 });
 
 const ov = StyleSheet.create({
@@ -1336,6 +1678,11 @@ const tb = StyleSheet.create({
     paddingHorizontal: 6, paddingVertical: 3,
   },
   devamTxt: { fontSize: 10, fontWeight: '700', color: '#6366f1' },
+  durumBadge: {
+    flexDirection: 'row', alignItems: 'center', gap: 3,
+    borderRadius: 7, borderWidth: 1, paddingHorizontal: 6, paddingVertical: 3,
+  },
+  durumTxt: { fontSize: 10, fontWeight: '700' },
 
   tamamlaBtn: {
     flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 3,

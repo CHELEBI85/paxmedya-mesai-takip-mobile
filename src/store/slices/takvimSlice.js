@@ -1,6 +1,6 @@
 import { createSlice, createAsyncThunk } from '@reduxjs/toolkit';
 import {
-  collection, query, where, getDocs, addDoc, updateDoc, deleteDoc, doc,
+  collection, query, where, getDocs, addDoc, updateDoc, deleteDoc, doc, serverTimestamp, arrayUnion,
 } from 'firebase/firestore';
 import { db } from '../../config/firebase';
 import { widgetGuncelle } from '../../widgets/widgetUpdater';
@@ -113,6 +113,49 @@ export const tamamlaGorev = createAsyncThunk('takvim/tamamlaGorev', async ({ id,
   return { id, updates };
 });
 
+export const durumGuncelle = createAsyncThunk('takvim/durumGuncelle', async ({ id, durum, revizeNotu, gonderenAd, gonderenId }, { getState }) => {
+  const tamamlandi = durum === 'tamamlandi';
+
+  const baseUpdates = {
+    durum,
+    tamamlandi,
+    ...(tamamlandi ? { tamamlandiAt: new Date().toISOString() } : {}),
+    ...(durum === 'onay_bekliyor' ? { onayBekliyorAt: new Date().toISOString() } : {}),
+  };
+
+  // Revize geçmişine eklenecek yeni kayıt
+  let revizeEntry = null;
+  if (durum === 'revize') {
+    revizeEntry = {
+      not: revizeNotu || '',
+      tarih: new Date().toISOString(),
+      gonderenAd: gonderenAd || '',
+      gonderenId: gonderenId || '',
+    };
+    baseUpdates.revizeNotu = revizeNotu || ''; // geriye dönük uyumluluk
+  }
+
+  // Firestore: revizeler arrayUnion ile eklenir (eski kayıtlar silinmez)
+  await updateDoc(doc(db, 'gorevler', id), {
+    ...baseUpdates,
+    ...(revizeEntry ? { revizeler: arrayUnion(revizeEntry) } : {}),
+  });
+
+  // Redux: plain array olarak güncelle (arrayUnion sentinel kullanılamaz)
+  const currentGorev = getState().takvim.gorevler.find(g => g.id === id);
+  const reduxUpdates = {
+    ...baseUpdates,
+    ...(revizeEntry ? { revizeler: [...(currentGorev?.revizeler || []), revizeEntry] } : {}),
+  };
+
+  const gorevler = getState().takvim.gorevler.map(g =>
+    g.id === id ? { ...g, ...reduxUpdates } : g
+  );
+  widgetGuncelle(gorevler);
+
+  return { id, updates: reduxUpdates };
+});
+
 const takvimSlice = createSlice({
   name: 'takvim',
   initialState: {
@@ -152,6 +195,10 @@ const takvimSlice = createSlice({
         s.gorevler = s.gorevler.filter(g => g.id !== a.payload);
       })
       .addCase(tamamlaGorev.fulfilled, (s, a) => {
+        const idx = s.gorevler.findIndex(g => g.id === a.payload.id);
+        if (idx !== -1) s.gorevler[idx] = { ...s.gorevler[idx], ...a.payload.updates };
+      })
+      .addCase(durumGuncelle.fulfilled, (s, a) => {
         const idx = s.gorevler.findIndex(g => g.id === a.payload.id);
         if (idx !== -1) s.gorevler[idx] = { ...s.gorevler[idx], ...a.payload.updates };
       });

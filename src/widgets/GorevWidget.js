@@ -14,8 +14,32 @@ const projeRenk = (proje = '') => {
 // Tarih formatı: "15/03" gibi
 const fmtTarih = (dateStr) => (dateStr ? dateStr.slice(5).replace('-', '/') : '');
 
+const DURUM_RENK = {
+  beklemede:        '#555555',
+  devam_ediyor:     '#6366f1',
+  onay_bekliyor:    '#f59e0b',
+  tamamlandi:       '#10b981',
+  revize:           '#ef4444',
+  revize_yapiliyor: '#f97316',
+};
+const DURUM_ETIKET = {
+  beklemede:        'Beklemede',
+  devam_ediyor:     'Devam Ediyor',
+  onay_bekliyor:    'Onay Bekliyor',
+  tamamlandi:       'Tamamlandı',
+  revize:           'Revize',
+  revize_yapiliyor: 'Revize Yapılıyor',
+};
+const getGorevDurum = (g) => {
+  if (g.durum) return g.durum;
+  return g.tamamlandi ? 'tamamlandi' : 'beklemede';
+};
+
 function GorevSatir({ gorev }) {
-  const renk = projeRenk(gorev.proje);
+  const projeRenki = projeRenk(gorev.proje);
+  const durum = getGorevDurum(gorev);
+  const durumRenk = DURUM_RENK[durum] || '#555555';
+  const durumEtiket = DURUM_ETIKET[durum] || 'Beklemede';
   return (
     <FlexWidget
       style={{
@@ -29,12 +53,12 @@ function GorevSatir({ gorev }) {
         paddingRight: 10,
       }}
     >
-      {/* Sol renk çubuğu */}
+      {/* Sol durum çubuğu */}
       <FlexWidget
         style={{
           width: 3,
           height: 28,
-          backgroundColor: renk,
+          backgroundColor: durumRenk,
           borderRadius: 2,
           marginLeft: 8,
           marginRight: 9,
@@ -49,29 +73,27 @@ function GorevSatir({ gorev }) {
           maxLines={1}
         />
         <TextWidget
-          style={{ fontSize: 9, color: renk, fontWeight: '600', marginTop: 1 }}
+          style={{ fontSize: 9, color: projeRenki, fontWeight: '600', marginTop: 1 }}
           text={gorev.proje || ''}
           maxLines={1}
         />
       </FlexWidget>
 
-      {/* Teslim tarihi */}
-      {gorev.teslim ? (
-        <FlexWidget
-          style={{
-            backgroundColor: renk + '20',
-            borderRadius: 5,
-            paddingHorizontal: 5,
-            paddingVertical: 2,
-            marginLeft: 6,
-          }}
-        >
-          <TextWidget
-            style={{ fontSize: 9, color: renk, fontWeight: '700' }}
-            text={fmtTarih(gorev.teslim)}
-          />
-        </FlexWidget>
-      ) : null}
+      {/* Durum badge */}
+      <FlexWidget
+        style={{
+          backgroundColor: durumRenk + '20',
+          borderRadius: 5,
+          paddingHorizontal: 5,
+          paddingVertical: 2,
+          marginLeft: 6,
+        }}
+      >
+        <TextWidget
+          style={{ fontSize: 9, color: durumRenk, fontWeight: '700' }}
+          text={durumEtiket}
+        />
+      </FlexWidget>
     </FlexWidget>
   );
 }
@@ -80,8 +102,8 @@ export function GorevWidget({ gorevler = [] }) {
   const bugun = new Date();
   const tarihStr = `${GUNLER[bugun.getDay()]} ${bugun.getDate()} ${AYLAR[bugun.getMonth()]}`;
 
-  const aktifGorevler = gorevler.filter(g => !g.tamamlandi);
-  const tamamlanan = gorevler.filter(g => g.tamamlandi).length;
+  const aktifGorevler = gorevler.filter(g => getGorevDurum(g) !== 'tamamlandi');
+  const tamamlanan = gorevler.filter(g => getGorevDurum(g) === 'tamamlandi').length;
   const toplam = gorevler.length;
   const goruntulenecek = aktifGorevler.slice(0, 4);
   const fazla = aktifGorevler.length - 4;

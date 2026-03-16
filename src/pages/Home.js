@@ -21,7 +21,7 @@ import CardButton from '../components/CardButton';
 import { useLocation } from '../hooks/useLocation';
 import notificationService from '../services/notificationService';
 import { useTakvim } from '../hooks/useTakvim';
-import { toDateStr, getWeekStart, gorevHaftaStr } from './Takvim';
+import { toDateStr, getWeekStart, gorevHaftaStr, getGorevDurum, DURUM_CONFIG } from './Takvim';
 
 
 const fmtSaat = (date) =>
@@ -307,7 +307,7 @@ export default function Home() {
                   <Text style={s.gorevKartAltTxt}>
                     {buHaftaGorevleri.length === 0
                       ? 'Bu hafta görev yok'
-                      : `${buHaftaGorevleri.filter(g => g.tamamlandi).length}/${buHaftaGorevleri.length} tamamlandı`}
+                      : `${buHaftaGorevleri.filter(g => getGorevDurum(g) === 'tamamlandi').length}/${buHaftaGorevleri.length} tamamlandı`}
                   </Text>
                 )}
               </View>
@@ -333,25 +333,29 @@ export default function Home() {
               {/* Progress bar */}
               <View style={s.gorevProgressWrap}>
                 <View style={[s.gorevProgressBar, {
-                  width: `${(buHaftaGorevleri.filter(g => g.tamamlandi).length / buHaftaGorevleri.length) * 100}%`
+                  width: `${(buHaftaGorevleri.filter(g => getGorevDurum(g) === 'tamamlandi').length / buHaftaGorevleri.length) * 100}%`
                 }]} />
               </View>
 
               {buHaftaGorevleri.slice(0, 4).map(g => {
-                const renk = g.tamamlandi ? '#10b981' : projeRenkH(g.proje);
+                const durum = getGorevDurum(g);
+                const durumCfg = DURUM_CONFIG[durum] || DURUM_CONFIG.beklemede;
+                const renk = durumCfg.color;
+                const isTamamlandi = durum === 'tamamlandi';
                 return (
-                  <View key={g.id} style={[s.gorevSatir, g.tamamlandi && { opacity: 0.55 }]}>
+                  <View key={g.id} style={[s.gorevSatir, isTamamlandi && { opacity: 0.55 }]}>
                     <View style={[s.gorevSerit, { backgroundColor: renk }]} />
                     <View style={s.gorevSatirIcerik}>
                       <View style={s.gorevSatirUst}>
                         <View style={[s.gorevProjeBadge, { backgroundColor: renk + '18' }]}>
                           <Text style={[s.gorevProje, { color: renk }]} numberOfLines={1}>{g.proje}</Text>
                         </View>
-                        {g.tamamlandi
-                          ? <MaterialIcons name="check-circle" size={14} color="#10b981" />
-                          : <Text style={s.gorevTarih}>{fmtGunAyH(g.teslim)}</Text>}
+                        <View style={s.gorevDurumBadge}>
+                          <MaterialIcons name={durumCfg.icon} size={12} color={renk} />
+                          <Text style={[s.gorevDurumTxt, { color: renk }]}>{durumCfg.label}</Text>
+                        </View>
                       </View>
-                      <Text style={[s.gorevIs, g.tamamlandi && { textDecorationLine: 'line-through' }]} numberOfLines={1}>{g.is}</Text>
+                      <Text style={[s.gorevIs, isTamamlandi && { textDecorationLine: 'line-through' }]} numberOfLines={1}>{g.is}</Text>
                       {g.sorumlular?.length > 0 && (
                         <View style={s.gorevSorumluRow}>
                           {g.sorumlular.slice(0, 3).map(sr => (
@@ -552,6 +556,8 @@ const s = StyleSheet.create({
   gorevProjeBadge: { paddingHorizontal: 7, paddingVertical: 2, borderRadius: 6, maxWidth: '60%' },
   gorevProje: { fontSize: 11, fontWeight: '700' },
   gorevTarih: { fontSize: 11, color: '#444444' },
+  gorevDurumBadge: { flexDirection: 'row', alignItems: 'center', gap: 3 },
+  gorevDurumTxt: { fontSize: 10, fontWeight: '700' },
   gorevIs: { fontSize: 13, color: '#888888', lineHeight: 18 },
   gorevSorumluRow: { flexDirection: 'row', alignItems: 'center', gap: 5, flexWrap: 'wrap' },
   gorevSorumluChip: { paddingHorizontal: 6, paddingVertical: 2, borderRadius: 5 },

@@ -36,6 +36,7 @@ import EnvanterYonetim from './src/pages/EnvanterYonetim';
 import Takvim from './src/pages/Takvim';
 import Profile from './src/pages/Profile';
 import Bildirimler from './src/pages/Bildirimler';
+import GorevDetay from './src/pages/GorevDetay';
 import ConfirmModal from './src/components/ConfirmModal';
 import ErrorBoundary from './src/components/ErrorBoundary';
 import ProtectedScreen from './src/components/ProtectedScreen';
@@ -237,6 +238,11 @@ function MainNavigator() {
             headerTintColor: '#ffffff',
             headerTitleStyle: { fontWeight: '700', fontSize: 17, color: '#ffffff' },
           }}
+        />
+        <Stack.Screen
+          name="GorevDetay"
+          component={GorevDetay}
+          options={{ headerShown: false }}
         />
       </Stack.Navigator>
     </ProtectedScreen>
