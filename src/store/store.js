@@ -4,6 +4,7 @@ import databaseReducer from './slices/databaseSlice';
 import envanterReducer from './slices/envanterSlice';
 import locationReducer from './slices/locationSlice';
 import takvimReducer from './slices/takvimSlice';
+import taleplerReducer from './slices/taleplerSlice';
 
 export const store = configureStore({
   reducer: {
@@ -12,10 +13,12 @@ export const store = configureStore({
     envanter: envanterReducer,
     location: locationReducer,
     takvim: takvimReducer,
+    talepler: taleplerReducer,
   },
   middleware: (getDefaultMiddleware) =>
     getDefaultMiddleware({
       serializableCheck: {
+        warnAfter: 128,
         ignoredActions: [
           'auth/loginUser/fulfilled',
           'database/updateUserProfile/fulfilled',
@@ -36,6 +39,20 @@ export const store = configureStore({
           'takvim/fetchKullanicilar/fulfilled',
           'takvim/addGorev/fulfilled',
           'takvim/updateGorev/fulfilled',
+          'talepler/fetchTalepler/fulfilled',
+          'talepler/fetchAllTalepler/fulfilled',
+          'talepler/fetchIzinler/fulfilled',
+          'talepler/fetchAllIzinler/fulfilled',
+          'talepler/addTalep/fulfilled',
+          'talepler/updateTalep/fulfilled',
+          'talepler/updateTalepDurum/fulfilled',
+          'talepler/addIzin/fulfilled',
+          'talepler/updateIzinDurum/fulfilled',
+          'talepler/fetchTaleplerNextPage/fulfilled',
+          'talepler/fetchAllTaleplerNextPage/fulfilled',
+          'talepler/fetchIzinlerNextPage/fulfilled',
+          'talepler/fetchAllIzinlerNextPage/fulfilled',
+          'takvim/fetchGorevlerOncesi/fulfilled',
         ],
         ignoredPaths: [
           'auth.user',
@@ -48,6 +65,10 @@ export const store = configureStore({
           'envanter.equipmentHistory',
           'takvim.gorevler',
           'takvim.kullanicilar',
+          'talepler.talepler',
+          'talepler.allTalepler',
+          'talepler.izinler',
+          'talepler.allIzinler',
         ],
       },
     }),

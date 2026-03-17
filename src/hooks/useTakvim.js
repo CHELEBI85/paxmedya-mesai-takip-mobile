@@ -1,15 +1,15 @@
 import { useCallback } from 'react';
 import { useDispatch, useSelector } from 'react-redux';
 import {
-  fetchGorevler, fetchKullanicilar, addGorev, updateGorev, deleteGorev, tamamlaGorev, durumGuncelle,
+  fetchGorevler, fetchGorevlerOncesi, fetchKullanicilar, addGorev, updateGorev, deleteGorev, tamamlaGorev, durumGuncelle,
 } from '../store/slices/takvimSlice';
 import { LIST_STALE_MS } from '../config/appConfig';
 
 export function useTakvim() {
   const dispatch = useDispatch();
   const {
-    gorevler, kullanicilar, loading, kullanicilarLoading, error,
-    lastGorevlerFetchAt, lastKullanicilarFetchAt,
+    gorevler, kullanicilar, loading, kullanicilarLoading, oncesiLoading, error,
+    gorevlerDateFrom, lastGorevlerFetchAt, lastKullanicilarFetchAt,
   } = useSelector(s => s.takvim);
 
   // Pull-to-refresh → her zaman Firestore'dan çek, cache'i güncelle
@@ -23,10 +23,10 @@ export function useTakvim() {
     (uid, role) => {
       const now = Date.now();
       const hasFresh = lastGorevlerFetchAt != null && now - lastGorevlerFetchAt < LIST_STALE_MS;
-      if (gorevler.length > 0 && hasFresh) return Promise.resolve();
+      if (hasFresh) return Promise.resolve();
       return dispatch(fetchGorevler({ uid, role, forceRefresh: false }));
     },
-    [dispatch, gorevler.length, lastGorevlerFetchAt]
+    [dispatch, lastGorevlerFetchAt]
   );
 
   // Pull-to-refresh → her zaman Firestore'dan çek
@@ -40,10 +40,10 @@ export function useTakvim() {
     () => {
       const now = Date.now();
       const hasFresh = lastKullanicilarFetchAt != null && now - lastKullanicilarFetchAt < LIST_STALE_MS;
-      if (kullanicilar.length > 0 && hasFresh) return Promise.resolve();
+      if (hasFresh) return Promise.resolve();
       return dispatch(fetchKullanicilar({ forceRefresh: false }));
     },
-    [dispatch, kullanicilar.length, lastKullanicilarFetchAt]
+    [dispatch, lastKullanicilarFetchAt]
   );
 
   const gorevEkle = useCallback((data) => dispatch(addGorev(data)), [dispatch]);
@@ -56,9 +56,21 @@ export function useTakvim() {
     [dispatch]
   );
 
+  const getGorevlerOncesi = useCallback(
+    (uid, role, aylarGeri = 3) => {
+      if (!gorevlerDateFrom) return Promise.resolve();
+      const d = new Date(gorevlerDateFrom + 'T00:00:00');
+      d.setMonth(d.getMonth() - aylarGeri);
+      const newDateFrom = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-01`;
+      return dispatch(fetchGorevlerOncesi({ uid, role, newDateFrom, currentDateFrom: gorevlerDateFrom }));
+    },
+    [dispatch, gorevlerDateFrom]
+  );
+
   return {
-    gorevler, kullanicilar, loading, kullanicilarLoading, error,
-    getGorevler, getGorevlerIfNeeded,
+    gorevler, kullanicilar, loading, kullanicilarLoading, oncesiLoading, error,
+    gorevlerDateFrom,
+    getGorevler, getGorevlerIfNeeded, getGorevlerOncesi,
     getKullanicilar, getKullanicilarIfNeeded,
     gorevEkle, gorevGuncelle, gorevSil, gorevTamamla, gorevDurumGuncelle,
   };

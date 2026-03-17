@@ -37,6 +37,9 @@ import Takvim from './src/pages/Takvim';
 import Profile from './src/pages/Profile';
 import Bildirimler from './src/pages/Bildirimler';
 import GorevDetay from './src/pages/GorevDetay';
+import GorevFormPage from './src/pages/GorevForm';
+import MesaiYonetim from './src/pages/MesaiYonetim';
+import Talepler from './src/pages/Talepler';
 import ConfirmModal from './src/components/ConfirmModal';
 import ErrorBoundary from './src/components/ErrorBoundary';
 import ProtectedScreen from './src/components/ProtectedScreen';
@@ -46,7 +49,7 @@ import notificationService from './src/services/notificationService';
 const Tab = createBottomTabNavigator();
 const Stack = createNativeStackNavigator();
 
-const TAB_ICONS = { Home: 'home', EnvanterYonetim: 'inventory', Takvim: 'calendar-today' };
+const TAB_ICONS = { Home: 'home', EnvanterYonetim: 'inventory', Takvim: 'calendar-today', MesaiYonetim: 'access-time', Talepler: 'assignment' };
 
 const FALLBACK_AVATAR = 'https://paxmedya.com.tr/wp-content/uploads/2026/03/logo.png';
 
@@ -187,6 +190,9 @@ function TabHeaderLogo() {
 }
 
 function BottomTabNavigator({ navigation }) {
+  const userProfile = useSelector((st) => st.database.userProfile);
+  const isAdmin = userProfile?.role === 'admin';
+
   return (
     <Tab.Navigator
       screenOptions={({ route }) => ({
@@ -209,6 +215,14 @@ function BottomTabNavigator({ navigation }) {
       <Tab.Screen name="Home" component={Home} options={{ tabBarLabel: 'Ana Sayfa' }} />
       <Tab.Screen name="EnvanterYonetim" component={EnvanterYonetim} options={{ tabBarLabel: 'Envanter' }} />
       <Tab.Screen name="Takvim" component={Takvim} options={{ tabBarLabel: 'Takvim' }} />
+      {isAdmin && (
+        <Tab.Screen
+          name="MesaiYonetim"
+          component={MesaiYonetim}
+          options={{ tabBarLabel: 'Mesai' }}
+        />
+      )}
+      <Tab.Screen name="Talepler" component={Talepler} options={{ tabBarLabel: 'Talepler' }} />
     </Tab.Navigator>
   );
 }
@@ -242,6 +256,11 @@ function MainNavigator() {
         <Stack.Screen
           name="GorevDetay"
           component={GorevDetay}
+          options={{ headerShown: false }}
+        />
+        <Stack.Screen
+          name="GorevForm"
+          component={GorevFormPage}
           options={{ headerShown: false }}
         />
       </Stack.Navigator>

@@ -199,6 +199,24 @@ export const updateWorkRecord = createAsyncThunk(
   }
 );
 
+/** Admin: tüm kullanıcıların kayıtlarını çek (userId filtresi yok) */
+export const fetchAllWorkRecords = createAsyncThunk(
+  'database/fetchAllWorkRecords',
+  async (_, { rejectWithValue }) => {
+    try {
+      const q = query(
+        collection(db, 'workRecords'),
+        orderBy('createdAt', 'desc'),
+        limit(500)
+      );
+      const snapshot = await getDocs(q);
+      return snapshot.docs.map(workRecordToPlain);
+    } catch (error) {
+      return rejectWithValue(error.message);
+    }
+  }
+);
+
 export const deleteWorkRecord = createAsyncThunk(
   'database/deleteWorkRecord',
   async ({ recordId }, { rejectWithValue }) => {
@@ -215,6 +233,9 @@ const databaseSlice = createSlice({
   name: 'database',
   initialState: {
     records: [],
+    adminRecords: [],
+    adminRecordsLoading: false,
+    adminLastFetchAt: null,
     userProfile: null,
     loading: false,
     recordsLoading: false,
@@ -295,6 +316,8 @@ const databaseSlice = createSlice({
         state.loading = false;
         const index = state.records.findIndex((r) => r.id === action.payload.id);
         if (index !== -1) state.records[index] = { ...state.records[index], ...action.payload };
+        const aIdx = state.adminRecords.findIndex((r) => r.id === action.payload.id);
+        if (aIdx !== -1) state.adminRecords[aIdx] = { ...state.adminRecords[aIdx], ...action.payload };
         state.error = null;
       })
       .addCase(updateWorkRecord.rejected, (state, action) => {
@@ -307,12 +330,22 @@ const databaseSlice = createSlice({
       .addCase(deleteWorkRecord.fulfilled, (state, action) => {
         state.loading = false;
         state.records = state.records.filter((r) => r.id !== action.payload);
+        state.adminRecords = state.adminRecords.filter((r) => r.id !== action.payload);
         state.error = null;
       })
       .addCase(deleteWorkRecord.rejected, (state, action) => {
         state.loading = false;
         state.error = action.payload;
       });
+
+    builder
+      .addCase(fetchAllWorkRecords.pending, (s) => { s.adminRecordsLoading = true; })
+      .addCase(fetchAllWorkRecords.fulfilled, (s, a) => {
+        s.adminRecordsLoading = false;
+        s.adminRecords = a.payload;
+        s.adminLastFetchAt = Date.now();
+      })
+      .addCase(fetchAllWorkRecords.rejected, (s) => { s.adminRecordsLoading = false; });
   },
 });
 

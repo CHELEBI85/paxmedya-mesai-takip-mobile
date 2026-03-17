@@ -21,7 +21,7 @@ import CardButton from '../components/CardButton';
 import { useLocation } from '../hooks/useLocation';
 import notificationService from '../services/notificationService';
 import { useTakvim } from '../hooks/useTakvim';
-import { toDateStr, getWeekStart, gorevHaftaStr, getGorevDurum, DURUM_CONFIG } from './Takvim';
+import { toDateStr, getWeekStart, gorevHaftaStr, getGorevDurum, DURUM_CONFIG, ONCELIK_CONFIG } from './Takvim';
 
 
 const fmtSaat = (date) =>
@@ -350,9 +350,20 @@ export default function Home() {
                         <View style={[s.gorevProjeBadge, { backgroundColor: renk + '18' }]}>
                           <Text style={[s.gorevProje, { color: renk }]} numberOfLines={1}>{g.proje}</Text>
                         </View>
-                        <View style={s.gorevDurumBadge}>
-                          <MaterialIcons name={durumCfg.icon} size={12} color={renk} />
-                          <Text style={[s.gorevDurumTxt, { color: renk }]}>{durumCfg.label}</Text>
+                        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 5 }}>
+                          <View style={s.gorevDurumBadge}>
+                            <MaterialIcons name={durumCfg.icon} size={12} color={renk} />
+                            <Text style={[s.gorevDurumTxt, { color: renk }]}>{durumCfg.label}</Text>
+                          </View>
+                          {(() => {
+                            const oc = ONCELIK_CONFIG[g.oncelik] || ONCELIK_CONFIG.orta;
+                            return (
+                              <View style={s.gorevDurumBadge}>
+                                <MaterialIcons name={oc.icon} size={12} color={oc.color} />
+                                <Text style={[s.gorevDurumTxt, { color: oc.color }]}>{oc.label}</Text>
+                              </View>
+                            );
+                          })()}
                         </View>
                       </View>
                       <Text style={[s.gorevIs, isTamamlandi && { textDecorationLine: 'line-through' }]} numberOfLines={1}>{g.is}</Text>

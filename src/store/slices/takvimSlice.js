@@ -1,6 +1,6 @@
 import { createSlice, createAsyncThunk } from '@reduxjs/toolkit';
 import {
-  collection, query, where, getDocs, addDoc, updateDoc, deleteDoc, doc, serverTimestamp, arrayUnion,
+  collection, query, where, getDocs, addDoc, updateDoc, deleteDoc, doc, serverTimestamp, arrayUnion, orderBy,
 } from 'firebase/firestore';
 import { db } from '../../config/firebase';
 import { widgetGuncelle } from '../../widgets/widgetUpdater';
@@ -12,41 +12,80 @@ const gorevlerCacheKey = (uid, role) =>
     ? `${CACHE_KEYS.GOREVLER}_all`
     : `${CACHE_KEYS.GOREVLER}_${uid}`;
 
+const threeMonthsAgo = () => {
+  const d = new Date();
+  d.setMonth(d.getMonth() - 3);
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-01`;
+};
+
 export const fetchGorevler = createAsyncThunk(
   'takvim/fetchGorevler',
-  async ({ uid, role, forceRefresh = false }) => {
+  async ({ uid, role, forceRefresh = false, dateFrom = null }) => {
     const cacheKey = gorevlerCacheKey(uid, role);
+    const actualDateFrom = dateFrom || threeMonthsAgo();
     try {
       if (!forceRefresh) {
         const cached = await cacheService.getValid(cacheKey);
         if (cached) {
-          // uid/role'ü kaydet ki widget arka planda Firestore'a bağlanabilsin
-          widgetGuncelle(cached, uid, role);
-          return cached;
+          const gorevler = Array.isArray(cached) ? cached : (cached.gorevler || []);
+          const cachedDateFrom = Array.isArray(cached) ? actualDateFrom : (cached.dateFrom || actualDateFrom);
+          widgetGuncelle(gorevler, uid, role);
+          return { gorevler, dateFrom: cachedDateFrom };
         }
       }
       let q;
       if (role === 'admin' || role === 'manager') {
-        q = collection(db, 'gorevler');
+        q = query(collection(db, 'gorevler'), where('baslangic', '>=', actualDateFrom), orderBy('baslangic'));
       } else {
-        q = query(collection(db, 'gorevler'), where('sorumluUidler', 'array-contains', uid));
+        q = query(
+          collection(db, 'gorevler'),
+          where('sorumluUidler', 'array-contains', uid),
+          where('baslangic', '>=', actualDateFrom),
+          orderBy('baslangic')
+        );
       }
       const snap = await getDocs(q);
-      const gorevler = snap.docs
-        .map(d => ({ id: d.id, ...d.data() }))
-        .sort((a, b) => (a.baslangic || '').localeCompare(b.baslangic || ''));
+      const gorevler = snap.docs.map(d => ({ id: d.id, ...d.data() }));
 
-      await cacheService.set(cacheKey, gorevler);
+      await cacheService.set(cacheKey, { gorevler, dateFrom: actualDateFrom });
       widgetGuncelle(gorevler, uid, role);
-      return gorevler;
+      return { gorevler, dateFrom: actualDateFrom };
     } catch (error) {
       const cached = await cacheService.getAny(cacheKey);
       if (cached) {
-        widgetGuncelle(cached, uid, role);
-        return cached;
+        const gorevler = Array.isArray(cached) ? cached : (cached.gorevler || []);
+        const cachedDateFrom = Array.isArray(cached) ? actualDateFrom : (cached.dateFrom || actualDateFrom);
+        widgetGuncelle(gorevler, uid, role);
+        return { gorevler, dateFrom: cachedDateFrom };
       }
       throw error;
     }
+  }
+);
+
+export const fetchGorevlerOncesi = createAsyncThunk(
+  'takvim/fetchGorevlerOncesi',
+  async ({ uid, role, newDateFrom, currentDateFrom }) => {
+    let q;
+    if (role === 'admin' || role === 'manager') {
+      q = query(
+        collection(db, 'gorevler'),
+        where('baslangic', '>=', newDateFrom),
+        where('baslangic', '<', currentDateFrom),
+        orderBy('baslangic')
+      );
+    } else {
+      q = query(
+        collection(db, 'gorevler'),
+        where('sorumluUidler', 'array-contains', uid),
+        where('baslangic', '>=', newDateFrom),
+        where('baslangic', '<', currentDateFrom),
+        orderBy('baslangic')
+      );
+    }
+    const snap = await getDocs(q);
+    const gorevler = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+    return { gorevler, newDateFrom };
   }
 );
 
@@ -163,7 +202,9 @@ const takvimSlice = createSlice({
     kullanicilar: [],
     loading: false,
     kullanicilarLoading: false,
+    oncesiLoading: false,
     error: null,
+    gorevlerDateFrom: null,
     lastGorevlerFetchAt: null,
     lastKullanicilarFetchAt: null,
   },
@@ -173,10 +214,21 @@ const takvimSlice = createSlice({
       .addCase(fetchGorevler.pending, (s) => { s.loading = true; s.error = null; })
       .addCase(fetchGorevler.fulfilled, (s, a) => {
         s.loading = false;
-        s.gorevler = a.payload;
+        s.gorevler = a.payload.gorevler;
+        s.gorevlerDateFrom = a.payload.dateFrom;
         s.lastGorevlerFetchAt = Date.now();
       })
       .addCase(fetchGorevler.rejected, (s, a) => { s.loading = false; s.error = a.error.message; })
+
+      .addCase(fetchGorevlerOncesi.pending, (s) => { s.oncesiLoading = true; })
+      .addCase(fetchGorevlerOncesi.fulfilled, (s, a) => {
+        s.oncesiLoading = false;
+        const existing = new Set(s.gorevler.map(g => g.id));
+        const yeni = a.payload.gorevler.filter(g => !existing.has(g.id));
+        s.gorevler = [...yeni, ...s.gorevler].sort((a, b) => (a.baslangic || '').localeCompare(b.baslangic || ''));
+        s.gorevlerDateFrom = a.payload.newDateFrom;
+      })
+      .addCase(fetchGorevlerOncesi.rejected, (s) => { s.oncesiLoading = false; })
 
       .addCase(fetchKullanicilar.pending, (s) => { s.kullanicilarLoading = true; })
       .addCase(fetchKullanicilar.fulfilled, (s, a) => {

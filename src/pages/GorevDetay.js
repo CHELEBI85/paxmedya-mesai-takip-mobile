@@ -35,6 +35,12 @@ const DURUM_CONFIG = {
   revize_yapiliyor: { label: 'Revize Yapılıyor', color: '#f97316', icon: 'construction' },
 };
 
+const ONCELIK_CONFIG = {
+  dusuk:  { label: 'Düşük',  color: '#6b7280', icon: 'keyboard-arrow-down' },
+  orta:   { label: 'Orta',   color: '#f59e0b', icon: 'remove' },
+  yuksek: { label: 'Yüksek', color: '#ef4444', icon: 'keyboard-arrow-up' },
+};
+
 const fmtTarihSaat = (isoStr) => {
   if (!isoStr) return '';
   const d = new Date(isoStr);
@@ -197,7 +203,7 @@ export default function GorevDetay() {
   };
 
   const handleDuzenle = () => {
-    navigation.navigate('Tabs', { screen: 'Takvim', params: { editGorevId: gorev.id } });
+    navigation.navigate('GorevForm', { gorevId: gorev.id });
   };
 
   return (
@@ -231,12 +237,21 @@ export default function GorevDetay() {
         contentContainerStyle={s.scrollIcerik}
         showsVerticalScrollIndicator={false}
       >
-        {/* Durum + gecikmiş */}
+        {/* Durum + Öncelik + gecikmiş */}
         <View style={s.durumRow}>
           <View style={[s.durumBadge, { backgroundColor: renk + '18', borderColor: renk + '40' }]}>
             <MaterialIcons name={dc.icon} size={15} color={renk} />
             <Text style={[s.durumTxt, { color: renk }]}>{dc.label}</Text>
           </View>
+          {(() => {
+            const oc = ONCELIK_CONFIG[gorev.oncelik] || ONCELIK_CONFIG.orta;
+            return (
+              <View style={[s.durumBadge, { backgroundColor: oc.color + '18', borderColor: oc.color + '40' }]}>
+                <MaterialIcons name={oc.icon} size={15} color={oc.color} />
+                <Text style={[s.durumTxt, { color: oc.color }]}>{oc.label}</Text>
+              </View>
+            );
+          })()}
           {overdue && (
             <View style={s.geciktiBadge}>
               <MaterialIcons name="warning" size={13} color="#ef4444" />

@@ -102,6 +102,8 @@ const withWidgetResources = (config) => {
 };
 
 module.exports = (config) => {
+  // Widget yalnızca Android'de desteklenir, iOS build'ında atla
+  if (config.ios && !config.android) return config;
   config = withWidgetManifest(config);
   config = withWidgetResources(config);
   return config;

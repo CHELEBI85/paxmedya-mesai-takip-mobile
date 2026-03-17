@@ -1,7 +1,5 @@
-import React from 'react';
+import { Platform } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { requestWidgetUpdate } from 'react-native-android-widget';
-import { GorevWidget } from './GorevWidget';
 import { WIDGET_GOREV_KEY, WIDGET_USER_KEY } from './widgetTaskHandler';
 
 function buHaftaAraligi() {
@@ -36,12 +34,17 @@ export async function widgetGuncelle(gorevler = [], uid = null, role = null) {
     // AsyncStorage'ı güncelle (widget task handler okur)
     await AsyncStorage.setItem(WIDGET_GOREV_KEY, JSON.stringify(haftaGorevleri));
 
-    // Widget'ı anlık yeniden render et
-    await requestWidgetUpdate({
-      widgetName: 'GorevWidget',
-      renderWidget: () => <GorevWidget gorevler={haftaGorevleri} />,
-      widgetNotFound: () => {},
-    });
+    // Android'de widget'ı anlık yeniden render et
+    if (Platform.OS === 'android') {
+      const React = require('react');
+      const { requestWidgetUpdate } = require('react-native-android-widget');
+      const { GorevWidget } = require('./GorevWidget');
+      await requestWidgetUpdate({
+        widgetName: 'GorevWidget',
+        renderWidget: () => React.createElement(GorevWidget, { gorevler: haftaGorevleri }),
+        widgetNotFound: () => {},
+      });
+    }
   } catch {
     // Widget eklenmemişse veya hata varsa sessizce geç
   }

@@ -35,6 +35,13 @@ const getGorevDurum = (g) => {
   return g.tamamlandi ? 'tamamlandi' : 'beklemede';
 };
 
+const ONCELIK_RENK = {
+  dusuk:  '#6b7280',
+  orta:   '#f59e0b',
+  yuksek: '#ef4444',
+};
+const ONCELIK_SEMBOL = { dusuk: '↓', orta: '—', yuksek: '↑' };
+
 function GorevSatir({ gorev }) {
   const projeRenki = projeRenk(gorev.proje);
   const durum = getGorevDurum(gorev);
@@ -79,6 +86,24 @@ function GorevSatir({ gorev }) {
         />
       </FlexWidget>
 
+      {/* Öncelik sembolü */}
+      <FlexWidget
+        style={{
+          backgroundColor: (ONCELIK_RENK[gorev.oncelik] || ONCELIK_RENK.orta) + '20',
+          borderRadius: 5,
+          width: 20,
+          height: 20,
+          alignItems: 'center',
+          justifyContent: 'center',
+          marginLeft: 4,
+        }}
+      >
+        <TextWidget
+          style={{ fontSize: 10, color: ONCELIK_RENK[gorev.oncelik] || ONCELIK_RENK.orta, fontWeight: '800' }}
+          text={ONCELIK_SEMBOL[gorev.oncelik] || ONCELIK_SEMBOL.orta}
+        />
+      </FlexWidget>
+
       {/* Durum badge */}
       <FlexWidget
         style={{
@@ -86,7 +111,7 @@ function GorevSatir({ gorev }) {
           borderRadius: 5,
           paddingHorizontal: 5,
           paddingVertical: 2,
-          marginLeft: 6,
+          marginLeft: 4,
         }}
       >
         <TextWidget

@@ -15,7 +15,10 @@ export const CACHE_KEYS = {
   EQUIP_HISTORY: '@cache_equip_history',         // + '_' + userId suffix
   GOREVLER: '@cache_gorevler',                   // + '_all' (admin/manager) veya '_' + uid
   KULLANICILAR: '@cache_kullanicilar',
-  TALEPLER: '@cache_talepler',                   // + '_' + userId suffix
+  TALEPLER: '@cache_talepler',            // + '_' + userId suffix
+  TALEPLER_ALL: '@cache_talepler_all',
+  IZINLER: '@cache_izinler',              // + '_' + userId suffix
+  IZINLER_ALL: '@cache_izinler_all',
 };
 
 export const CACHE_TTL = 30 * 60 * 1000; // 30 dakika

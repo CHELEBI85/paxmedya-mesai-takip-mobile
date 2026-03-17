@@ -1,0 +1,70 @@
+{
+  "indexes": [
+    {
+      "collectionGroup": "workRecords",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "userId", "order": "ASCENDING" },
+        { "fieldPath": "createdAt", "order": "DESCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "envanterHareketler",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "userId", "order": "ASCENDING" },
+        { "fieldPath": "teslimAlma", "order": "DESCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "envanterHareketler",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "userId", "order": "ASCENDING" },
+        { "fieldPath": "teslimAlma", "order": "ASCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "envanterItems",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "bos", "order": "ASCENDING" },
+        { "fieldPath": "ad", "order": "ASCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "envanterItems",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "bos", "order": "ASCENDING" },
+        { "fieldPath": "tur", "order": "ASCENDING" },
+        { "fieldPath": "ad", "order": "ASCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "gorevler",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "sorumluUidler", "arrayConfig": "CONTAINS" },
+        { "fieldPath": "baslangic", "order": "ASCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "talepler",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "olusturanId", "order": "ASCENDING" },
+        { "fieldPath": "createdAt", "order": "DESCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "izinTalepleri",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "userId", "order": "ASCENDING" },
+        { "fieldPath": "createdAt", "order": "DESCENDING" }
+      ]
+    }
+  ],
+  "fieldOverrides": []
+}

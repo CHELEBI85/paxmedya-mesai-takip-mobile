@@ -1,11 +1,17 @@
 import { doc, getDoc } from 'firebase/firestore';
-import { Linking } from 'react-native';
+import { Linking, Platform } from 'react-native';
 import * as Application from 'expo-application';
 import { db } from '../config/firebase';
 
 const PACKAGE_ID     = 'com.paxmedya.paxportal';
 const PLAY_STORE_URL = `market://details?id=${PACKAGE_ID}`;
 const PLAY_STORE_WEB = `https://play.google.com/store/apps/details?id=${PACKAGE_ID}`;
+
+// App Store'a yükledikten sonra buraya sayısal App Store ID'yi yaz
+// Örnek: 'itms-apps://apps.apple.com/tr/app/pax-portal/1234567890'
+const APP_STORE_ID   = '';
+const APP_STORE_URL  = APP_STORE_ID ? `itms-apps://apps.apple.com/tr/app/pax-portal/${APP_STORE_ID}` : '';
+const APP_STORE_WEB  = APP_STORE_ID ? `https://apps.apple.com/tr/app/pax-portal/${APP_STORE_ID}` : '';
 
 /** Semver karşılaştırma: a < b → -1, a === b → 0, a > b → 1 */
 function compareVersions(a, b) {
@@ -54,13 +60,27 @@ const updateService = {
     }
   },
 
-  async openPlayStore() {
+  async openStore() {
     try {
-      const canOpen = await Linking.canOpenURL(PLAY_STORE_URL);
-      await Linking.openURL(canOpen ? PLAY_STORE_URL : PLAY_STORE_WEB);
+      if (Platform.OS === 'ios') {
+        if (!APP_STORE_URL) return; // App Store ID henüz eklenmemiş
+        const canOpen = await Linking.canOpenURL(APP_STORE_URL);
+        await Linking.openURL(canOpen ? APP_STORE_URL : APP_STORE_WEB);
+      } else {
+        const canOpen = await Linking.canOpenURL(PLAY_STORE_URL);
+        await Linking.openURL(canOpen ? PLAY_STORE_URL : PLAY_STORE_WEB);
+      }
     } catch {
-      try { await Linking.openURL(PLAY_STORE_WEB); } catch { }
+      try {
+        const fallback = Platform.OS === 'ios' ? APP_STORE_WEB : PLAY_STORE_WEB;
+        if (fallback) await Linking.openURL(fallback);
+      } catch { }
     }
+  },
+
+  // Geriye dönük uyumluluk için alias
+  async openPlayStore() {
+    return this.openStore();
   },
 };
 

@@ -13,12 +13,17 @@
       "backgroundColor": "#000000"
     },
     "ios": {
-      "supportsTablet": true,
+      "supportsTablet": false,
       "bundleIdentifier": "com.paxmedya.paxportal",
-      "infoPlist": {
-        "NSLocationWhenInUseUsageDescription": "Mesai girisi ve cikisi icin konumunuza ihtiyacimiz var.",
-        "NSLocationAlwaysUsageDescription": "Mesai girisi ve cikisi icin konumunuza ihtiyacimiz var.",
-        "NSCameraUsageDescription": "QR kod taramak icin kamera izni gereklidir."
+      "buildNumber": "1",
+"infoPlist": {
+        "NSLocationWhenInUseUsageDescription": "Mesai girişi ve çıkışı için konumunuza ihtiyacımız var.",
+        "NSLocationAlwaysAndWhenInUseUsageDescription": "Mesai girişi ve çıkışı için arka planda konum takibi yapılmaktadır.",
+        "NSCameraUsageDescription": "QR kod taramak için kamera izni gereklidir.",
+        "NSMicrophoneUsageDescription": "Video çekimi sırasında ses kaydı için mikrofon izni gereklidir.",
+        "NSPhotoLibraryUsageDescription": "Fotoğraf seçmek için galeri izni gereklidir.",
+        "UIBackgroundModes": ["location", "fetch", "remote-notification"],
+        "NSLocationAlwaysUsageDescription": "Mesai girişi ve çıkışı için arka planda konum takibi yapılmaktadır."
       }
     },
     "android": {
@@ -50,7 +55,7 @@
       [
         "expo-location",
         {
-          "locationAlwaysAndWhenInUsePermission": "Mesai girisi ve cikisi icin konumunuza ihtiyacimiz var."
+          "locationAlwaysAndWhenInUsePermission": "Mesai girişi ve çıkışı için konumunuza ihtiyacımız var."
         }
       ],
       "expo-font",
@@ -58,13 +63,15 @@
         "expo-notifications",
         {
           "icon": "./assets/icon.png",
-          "color": "#000000"
+          "color": "#000000",
+          "defaultChannel": "default",
+          "sounds": []
         }
       ],
       [
         "expo-camera",
         {
-          "cameraPermission": "QR kod taramak icin kamera izni gereklidir."
+          "cameraPermission": "QR kod taramak için kamera izni gereklidir."
         }
       ]
     ]

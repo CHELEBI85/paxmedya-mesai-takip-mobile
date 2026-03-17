@@ -71,9 +71,9 @@ export const useEnvanter = () => {
   const getHareketlerIfNeeded = useCallback(() => {
     const now = Date.now();
     const hasFresh = lastHareketlerFetchAt != null && now - lastHareketlerFetchAt < LIST_STALE_MS;
-    if (hareketler.length > 0 && hasFresh) return Promise.resolve();
+    if (hasFresh) return Promise.resolve();
     return dispatch(fetchEnvanterHareketler({ forceRefresh: false, uid, role }));
-  }, [dispatch, hareketler.length, lastHareketlerFetchAt, uid, role]);
+  }, [dispatch, lastHareketlerFetchAt, uid, role]);
 
   // forceRefresh = true → pull-to-refresh, false (default) → cache kullan
   const getCounts = useCallback(
